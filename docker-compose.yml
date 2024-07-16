@@ -1,0 +1,7 @@
+services:
+  allezon-app:
+    image: allezon-app:latest
+    container_name: allezon-app
+    build: .
+    ports:
+      - "8080:8080"

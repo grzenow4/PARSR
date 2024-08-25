@@ -24,15 +24,18 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import com.aerospike.client.AerospikeClient;
+import com.aerospike.client.AerospikeException;
 import com.aerospike.client.Bin;
 import com.aerospike.client.Host;
 import com.aerospike.client.Info;
 import com.aerospike.client.Key;
 import com.aerospike.client.Operation;
 import com.aerospike.client.Record;
+import com.aerospike.client.ResultCode;
 import com.aerospike.client.cdt.ListOperation;
 import com.aerospike.client.policy.ClientPolicy;
 import com.aerospike.client.policy.CommitLevel;
+import com.aerospike.client.policy.GenerationPolicy;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.RecordExistsAction;
 import com.aerospike.client.policy.Replica;
@@ -86,46 +89,94 @@ public class UserActionsService {
     }
 
 
+public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
+    try {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        String serializedEvent = mapper.writeValueAsString(userTag);
 
-    public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
-        try {
-            // log.info("try to add ??");
-            // Serialize the UserTagEvent to JSON
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.registerModule(new JavaTimeModule());
-            String serializedEvent = mapper.writeValueAsString(userTag);
+        String keyString = userTag.getCookie() + ":" + userTag.getAction();
+        Key key = new Key(NAMESPACE, SET, keyString);
 
-            // Create a unique key for the user tag list
-            String keyString = userTag.getCookie() + ":" + userTag.getAction();
-            Key key = new Key(NAMESPACE, SET, keyString);
+        WritePolicy writePolicy = new WritePolicy();
+        writePolicy.recordExistsAction = RecordExistsAction.UPDATE;
 
-            // Create the list operation to append the serialized event
+        while (true) {
+            Record record = client.get(null, key);
+            int generation = (record != null) ? record.generation : 0;
+
+            // Append the new tag to the list
             Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
-
-            // Create the list size operation to check the size after appending
             Operation sizeOperation = ListOperation.size("tags");
 
-            // Perform the operations
-            WritePolicy writePolicy = new WritePolicy();
-            writePolicy.recordExistsAction = RecordExistsAction.UPDATE; // Update the list if it exists
-            Record record = client.operate(writePolicy, key, appendOperation, sizeOperation);
+            writePolicy.generationPolicy = (record != null) ? GenerationPolicy.EXPECT_GEN_EQUAL : GenerationPolicy.NONE;
+            writePolicy.generation = generation;
 
-            // Check the size of the list
-            int currentSize = record.getInt("tags_size");
+            try {
+                Record newRecord = client.operate(writePolicy, key, appendOperation, sizeOperation);
+                int currentSize = newRecord.getInt("tags_size");
 
-            // Trim the list if it exceeds the maximum size
-            if (currentSize > 2 * MAX_LIST_SIZE) {
-                Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
-                client.operate(writePolicy, key, trimOperation);
+                // Trim the list if it exceeds the maximum size
+                if (currentSize > 2 * MAX_LIST_SIZE) {
+                    Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
+                    client.operate(writePolicy, key, trimOperation);
+                }
+                break;
+            } catch (AerospikeException ae) {
+                if (ae.getResultCode() == ResultCode.GENERATION_ERROR) {
+                    log.info("Generation error, retrying...");
+                } else {
+                    throw ae; // For other exceptions, rethrow
+                }
             }
-            // log.info("added good");
-        } catch (JsonProcessingException e) {
-            log.error("failed1", e);
-        } catch (Exception e) {
-            log.error("failed2", e);
         }
-        return ResponseEntity.noContent().build();
+    } catch (JsonProcessingException e) {
+        log.error("Serialization failed", e);
+    } catch (Exception e) {
+        log.error("Failed to add UserTagEvent", e);
     }
+
+    return ResponseEntity.noContent().build();
+}
+    // public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
+    //     try {
+    //         // log.info("try to add ??");
+    //         // Serialize the UserTagEvent to JSON
+    //         ObjectMapper mapper = new ObjectMapper();
+    //         mapper.registerModule(new JavaTimeModule());
+    //         String serializedEvent = mapper.writeValueAsString(userTag);
+
+    //         // Create a unique key for the user tag list
+    //         String keyString = userTag.getCookie() + ":" + userTag.getAction();
+    //         Key key = new Key(NAMESPACE, SET, keyString);
+
+    //         // Create the list operation to append the serialized event
+    //         Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
+
+    //         // Create the list size operation to check the size after appending
+    //         Operation sizeOperation = ListOperation.size("tags");
+
+    //         // Perform the operations
+    //         WritePolicy writePolicy = new WritePolicy();
+    //         writePolicy.recordExistsAction = RecordExistsAction.UPDATE; // Update the list if it exists
+    //         Record record = client.operate(writePolicy, key, appendOperation, sizeOperation);
+
+    //         // Check the size of the list
+    //         int currentSize = record.getInt("tags_size");
+
+    //         // Trim the list if it exceeds the maximum size
+    //         if (currentSize > 2 * MAX_LIST_SIZE) {
+    //             Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
+    //             client.operate(writePolicy, key, trimOperation);
+    //         }
+    //         // log.info("added good");
+    //     } catch (JsonProcessingException e) {
+    //         log.error("failed1", e);
+    //     } catch (Exception e) {
+    //         log.error("failed2", e);
+    //     }
+    //     return ResponseEntity.noContent().build();
+    // }
 
     private List<UserTagEvent> getUserTagsForAction(String cookie, Action action, TimeBound timeBound, int limit) {
         // log.info("looking for {} for cookie {}", action, cookie);
@@ -187,26 +238,9 @@ public class UserActionsService {
             log.error("Failed to parse time range", e);
             return ResponseEntity.badRequest().build();
         }
-        // log.info("expecting {} {} events", expectedResult.getViews().size(), Action.VIEW);
         List<UserTagEvent> views = getUserTagsForAction(cookie, Action.VIEW, timeBound, limit);
-        // log.info("expecting {} {} events", expectedResult.getBuys().size(), Action.BUY);
         List<UserTagEvent> buys = getUserTagsForAction(cookie, Action.BUY, timeBound, limit);
-        // log.info("++++++++++++++");
         UserProfileResult myResult = new UserProfileResult(cookie, views, buys);
-        if (views.size() != expectedResult.getViews().size()) {
-            log.info("view: cookie {} expected {} but got {}", cookie, expectedResult.getViews().size(), views.size());
-            log.info("ACTUAL");
-            for (UserTagEvent userTagEvent : views) {
-                log.info(userTagEvent.toString());
-            }
-            log.info("EXPECTED");
-            for (UserTagEvent userTagEvent : expectedResult.getViews()) {
-                log.info(userTagEvent.toString());
-            }
-        }
-        if (buys.size() != expectedResult.getBuys().size()) {
-            log.info("buy: expected {} but got {}", expectedResult.getBuys().size(), buys.size());
-        }
         return ResponseEntity.ok(myResult);
     }
 

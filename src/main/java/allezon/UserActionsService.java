@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
@@ -13,11 +14,19 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+
+import com.aerospike.client.AerospikeClient;
+import com.aerospike.client.Host;
+import com.aerospike.client.policy.ClientPolicy;
+import com.aerospike.client.policy.CommitLevel;
+import com.aerospike.client.policy.RecordExistsAction;
+import com.aerospike.client.policy.Replica;
 
 import allezon.domain.Action;
 import allezon.domain.TimeBound;
@@ -26,9 +35,30 @@ import allezon.domain.UserTagEvent;
 
 @Service
 public class UserActionsService {
-        private static final Logger log = LoggerFactory.getLogger(UserActionsResource.class);
+    private static final String NAMESPACE = "parsr";
 
+    private static final Logger log = LoggerFactory.getLogger(UserActionsResource.class);
+
+    private AerospikeClient client;
     Map<String, Map<Action, LinkedList<UserTagEvent>>> events = new ConcurrentHashMap<>();
+
+    public UserActionsService(@Value("${aerospike.seeds}") String[] aerospikeSeeds, @Value("${aerospike.port}") int port) {
+        this.client = new AerospikeClient(defaultClientPolicy(), Arrays.stream(aerospikeSeeds).map(seed -> new Host(seed, port)).toArray(Host[]::new));
+
+    }
+
+    private static ClientPolicy defaultClientPolicy() {
+        ClientPolicy defaultClientPolicy = new ClientPolicy();
+        defaultClientPolicy.readPolicyDefault.replica = Replica.MASTER_PROLES;
+        defaultClientPolicy.readPolicyDefault.socketTimeout = 1000;
+        defaultClientPolicy.readPolicyDefault.totalTimeout = 1000;
+        defaultClientPolicy.writePolicyDefault.socketTimeout = 15000;
+        defaultClientPolicy.writePolicyDefault.totalTimeout = 15000;
+        defaultClientPolicy.writePolicyDefault.maxRetries = 1;
+        defaultClientPolicy.writePolicyDefault.commitLevel = CommitLevel.COMMIT_MASTER;
+        defaultClientPolicy.writePolicyDefault.recordExistsAction = RecordExistsAction.REPLACE;
+        return defaultClientPolicy;
+    }
 
     public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
         if (!events.containsKey(userTag.getCookie())) {

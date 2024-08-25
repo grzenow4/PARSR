@@ -49,20 +49,11 @@ mod-lua {
 namespace parsr {
 	replication-factor 2
 	memory-size 7G
-  nsup-period 15
+  	nsup-period 15
 
-  stop-writes-pct 92
-  high-water-memory-pct 90
-  high-water-disk-pct 90
+	stop-writes-pct 92
+  	high-water-memory-pct 90
+  	high-water-disk-pct 90
 
-	storage-engine device {
-    	filesize 6G
-		file /opt/aerospike/data/parsr1.dat
-		file /opt/aerospike/data/parsr2.dat
-		file /opt/aerospike/data/parsr3.dat
-		file /opt/aerospike/data/parsr4.dat
-		
-		defrag-lwm-pct 90
-		defrag-sleep 50
-	}
+  	storage-engine memory
 }

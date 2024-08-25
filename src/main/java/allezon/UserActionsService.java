@@ -65,10 +65,6 @@ public class UserActionsService {
             IndexTask cookieIndexTask = client.createIndex(null, NAMESPACE, SET, "cookie_index", "cookie", IndexType.STRING);
             cookieIndexTask.waitTillComplete();   
         }
-        if (!indexesInfo.contains("action_index")) {
-            IndexTask actionIndexTask = client.createIndex(null, NAMESPACE, SET, "action_index", "action", IndexType.STRING);
-            actionIndexTask.waitTillComplete();   
-        }
     }
 
     private static ClientPolicy defaultClientPolicy() {

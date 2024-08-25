@@ -55,5 +55,14 @@ namespace parsr {
   	high-water-memory-pct 90
   	high-water-disk-pct 90
 
-  	storage-engine memory
+	storage-engine device {
+    	filesize 6G
+		file /opt/aerospike/data/parsr1.dat
+		file /opt/aerospike/data/parsr2.dat
+		file /opt/aerospike/data/parsr3.dat
+		file /opt/aerospike/data/parsr4.dat
+
+		defrag-lwm-pct 90
+		defrag-sleep 50
+	}
 }

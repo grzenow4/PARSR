@@ -1,9 +1,21 @@
 package allezon;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,23 +30,24 @@ import allezon.domain.UserProfileResult;
 import allezon.domain.UserTagEvent;
 
 @RestController
-public class EchoClient {
+public class UserActionsResource {
 
-    private static final Logger log = LoggerFactory.getLogger(EchoClient.class);
+    private static final Logger log = LoggerFactory.getLogger(UserActionsResource.class);
+
+    @Autowired
+    UserActionsService userActionsService;
 
     @PostMapping("/user_tags")
     public ResponseEntity<Void> addUserTag(@RequestBody(required = false) UserTagEvent userTag) {
-
-        return ResponseEntity.noContent().build();
+        return userActionsService.addUserTag(userTag);
     }
 
     @PostMapping("/user_profiles/{cookie}")
     public ResponseEntity<UserProfileResult> getUserProfile(@PathVariable("cookie") String cookie,
-            @RequestParam("time_range") String timeRangeStr,
-            @RequestParam(defaultValue = "200") int limit,
-            @RequestBody(required = false) UserProfileResult expectedResult) {
-
-        return ResponseEntity.ok(expectedResult);
+                                                            @RequestParam("time_range") String timeRangeStr,
+                                                            @RequestParam(defaultValue = "200") int limit,
+                                                            @RequestBody(required = false) UserProfileResult expectedResult) {
+        return userActionsService.getUserProfile(cookie, timeRangeStr, limit, expectedResult);
     }
 
     @PostMapping("/aggregates")

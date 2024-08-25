@@ -4,10 +4,13 @@ import java.time.Instant;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import lombok.Data;
+
 
 // @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 // We have to use @JsonProperty annotations instead the above due to this bug:
 // https://github.com/FasterXML/jackson-databind/issues/3102
+@Data
 public class UserTagEvent {
 
     private Instant time;

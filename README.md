@@ -378,3 +378,30 @@ We decided not to put HTTP specs of the API in this document. If someone wants t
 * Use Load Balancer to distribute HTTP traffic on several independent machines.
 * Try to implement Use Case 3 in an event streaming fashion.
 * Automated and managed deployment is preferred. Shell scripts, Ansible, Docker Swarm + Docker Stack, Kubernetes - there is a plethora of available options.
+
+
+# How to run the app (for now)
+Clone the repository on 5 machines, switch to add-aerospike branch.
+Everywhere, switch st124 to st<your number>, vm numbers can also be changed obviously.
+vm101: (database)
+sudo apt -y install ansible sshpass
+cd aerospike
+ansible-playbook --extra-vars "ansible_user=<user> ansible_password=<password> ansible_ssh_extra_args='-o StrictHostKeyChecking=no'" -i hosts aerospike.yaml
+(It will start aerospike on vm101 and vm102)
+
+
+vm101, vm104, vm106: (java service)
+sudo apt install maven
+mvn clean install
+mvn spring-boot:app
+
+vm105: (load balancer)
+sudo docker build -t my-proxy .
+sudo docker run --network=host --privileged my-proxy
+(you can monitor it on stXYZvmANC.rtb-lab.pl:10000)
+-----------------------------------------------------
+todo:
+1. containerize the app, to make deploymeant easier (no git clone etc)
+   write scripts for quicker setup (the fewer commands the better)
+2. add use case 3 implementation
+

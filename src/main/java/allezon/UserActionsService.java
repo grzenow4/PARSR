@@ -67,12 +67,6 @@ public class UserActionsService {
 
     public UserActionsService(@Value("${aerospike.seeds}") String[] aerospikeSeeds, @Value("${aerospike.port}") int port) {
         this.client = new AerospikeClient(defaultClientPolicy(), Arrays.stream(aerospikeSeeds).map(seed -> new Host(seed, port)).toArray(Host[]::new));
-
-        // String indexesInfo = Info.request(client.getNodes()[0], "sindex/" + NAMESPACE);
-        // if (!indexesInfo.contains("cookie_index")) {
-        //     IndexTask cookieIndexTask = client.createIndex(null, NAMESPACE, SET, "cookie_index", "cookie", IndexType.STRING);
-        //     cookieIndexTask.waitTillComplete();   
-        // }
     }
 
     private static ClientPolicy defaultClientPolicy() {
@@ -88,96 +82,65 @@ public class UserActionsService {
         return defaultClientPolicy;
     }
 
+    public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.registerModule(new JavaTimeModule());
+            String serializedEvent = mapper.writeValueAsString(userTag);
 
-public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
-    try {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        String serializedEvent = mapper.writeValueAsString(userTag);
+            String keyString = userTag.getCookie() + ":" + userTag.getAction();
+            Key key = new Key(NAMESPACE, SET, keyString);
 
-        String keyString = userTag.getCookie() + ":" + userTag.getAction();
-        Key key = new Key(NAMESPACE, SET, keyString);
+            while (true) {
+                Record record = client.get(null, key);
+                // Append the new tag to the list
+                Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
+                Operation sizeOperation = ListOperation.size("tags");
 
-        WritePolicy writePolicy = new WritePolicy();
-        writePolicy.recordExistsAction = RecordExistsAction.UPDATE;
+                WritePolicy writePolicy = createWritePolicy(record);
+                try {
+                    Record newRecord = client.operate(writePolicy, key, appendOperation, sizeOperation);
+                    int currentSize = Integer.valueOf(newRecord.getList("tags").get(0).toString());
 
-        while (true) {
-            Record record = client.get(null, key);
-            int generation = (record != null) ? record.generation : 0;
-
-            // Append the new tag to the list
-            Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
-            Operation sizeOperation = ListOperation.size("tags");
-
-            writePolicy.generationPolicy = (record != null) ? GenerationPolicy.EXPECT_GEN_EQUAL : GenerationPolicy.NONE;
-            writePolicy.generation = generation;
-
-            try {
-                Record newRecord = client.operate(writePolicy, key, appendOperation, sizeOperation);
-                int currentSize = newRecord.getInt("tags_size");
-
-                // Trim the list if it exceeds the maximum size
-                if (currentSize > 2 * MAX_LIST_SIZE) {
-                    Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
-                    client.operate(writePolicy, key, trimOperation);
-                    log.info("just trimmed the guy!!!");
-                }
-                break;
-            } catch (AerospikeException ae) {
-                if (ae.getResultCode() == ResultCode.GENERATION_ERROR) {
-                    log.info("Generation error, retrying...");
-                } else {
-                    throw ae; // For other exceptions, rethrow
+                    if (isListTooLarge(currentSize)) {
+                        removeOutdatedRecords(newRecord, currentSize, key);
+                    }
+                    break;
+                } catch (AerospikeException ae) {
+                    if (ae.getResultCode() == ResultCode.GENERATION_ERROR) {
+                        log.info("Generation error, retrying...");
+                    } else {
+                        throw ae; // For other exceptions, rethrow
+                    }
                 }
             }
+        } catch (JsonProcessingException e) {
+            log.error("Serialization failed", e);
+        } catch (Exception e) {
+            log.error("Failed to add UserTagEvent", e);
         }
-    } catch (JsonProcessingException e) {
-        log.error("Serialization failed", e);
-    } catch (Exception e) {
-        log.error("Failed to add UserTagEvent", e);
+
+        return ResponseEntity.noContent().build();
     }
 
-    return ResponseEntity.noContent().build();
-}
-    // public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
-    //     try {
-    //         // log.info("try to add ??");
-    //         // Serialize the UserTagEvent to JSON
-    //         ObjectMapper mapper = new ObjectMapper();
-    //         mapper.registerModule(new JavaTimeModule());
-    //         String serializedEvent = mapper.writeValueAsString(userTag);
+    private boolean isListTooLarge(int currentSize) {
+        return currentSize > 2 * MAX_LIST_SIZE;
+    }
 
-    //         // Create a unique key for the user tag list
-    //         String keyString = userTag.getCookie() + ":" + userTag.getAction();
-    //         Key key = new Key(NAMESPACE, SET, keyString);
+    private void removeOutdatedRecords(Record newRecord, int currentSize, Key key) {
+        Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
+        WritePolicy writePolicy = createWritePolicy(newRecord);
+        client.operate(writePolicy, key, trimOperation);
+        log.info("just trimmed the list - it had {} records", currentSize);
+    }
 
-    //         // Create the list operation to append the serialized event
-    //         Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
-
-    //         // Create the list size operation to check the size after appending
-    //         Operation sizeOperation = ListOperation.size("tags");
-
-    //         // Perform the operations
-    //         WritePolicy writePolicy = new WritePolicy();
-    //         writePolicy.recordExistsAction = RecordExistsAction.UPDATE; // Update the list if it exists
-    //         Record record = client.operate(writePolicy, key, appendOperation, sizeOperation);
-
-    //         // Check the size of the list
-    //         int currentSize = record.getInt("tags_size");
-
-    //         // Trim the list if it exceeds the maximum size
-    //         if (currentSize > 2 * MAX_LIST_SIZE) {
-    //             Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
-    //             client.operate(writePolicy, key, trimOperation);
-    //         }
-    //         // log.info("added good");
-    //     } catch (JsonProcessingException e) {
-    //         log.error("failed1", e);
-    //     } catch (Exception e) {
-    //         log.error("failed2", e);
-    //     }
-    //     return ResponseEntity.noContent().build();
-    // }
+    private WritePolicy createWritePolicy(Record record) {
+        WritePolicy writePolicy = new WritePolicy();
+        writePolicy.recordExistsAction = RecordExistsAction.UPDATE;  
+        writePolicy.generationPolicy = (record != null) ? GenerationPolicy.EXPECT_GEN_EQUAL : GenerationPolicy.NONE;
+        writePolicy.generation = (record != null) ? record.generation : 0;
+        return writePolicy;
+    }
 
     private List<UserTagEvent> getUserTagsForAction(String cookie, Action action, TimeBound timeBound, int limit) {
         // log.info("looking for {} for cookie {}", action, cookie);

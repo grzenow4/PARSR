@@ -120,6 +120,7 @@ public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
                 if (currentSize > 2 * MAX_LIST_SIZE) {
                     Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
                     client.operate(writePolicy, key, trimOperation);
+                    log.info("just trimmed the guy!!!");
                 }
                 break;
             } catch (AerospikeException ae) {

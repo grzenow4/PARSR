@@ -92,29 +92,20 @@ public class UserActionsService {
             String keyString = userTag.getCookie() + ":" + userTag.getAction();
             Key key = new Key(NAMESPACE, SET, keyString);
 
-            WritePolicy writePolicy = new WritePolicy();
-            writePolicy.recordExistsAction = RecordExistsAction.UPDATE;
 
             while (true) {
                 Record record = client.get(null, key);
-                int generation = (record != null) ? record.generation : 0;
-
                 // Append the new tag to the list
                 Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
                 Operation sizeOperation = ListOperation.size("tags");
 
-                writePolicy.generationPolicy = (record != null) ? GenerationPolicy.EXPECT_GEN_EQUAL : GenerationPolicy.NONE;
-                writePolicy.generation = generation;
-
+                WritePolicy writePolicy = createWritePolicy(record);
                 try {
                     Record newRecord = client.operate(writePolicy, key, appendOperation, sizeOperation);
-                    int currentSize = newRecord.getInt("tags_size");
+                    int currentSize = Integer.valueOf(newRecord.getList("tags").get(0).toString());
 
-                    // Trim the list if it exceeds the maximum size
-                    if (currentSize > 2 * MAX_LIST_SIZE) {
-                        Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
-                        client.operate(writePolicy, key, trimOperation);
-                        log.info("just trimmed the guy!!!");
+                    if (isListTooLarge(currentSize)) {
+                        removeOutdatedRecords(newRecord, currentSize, key);
                     }
                     break;
                 } catch (AerospikeException ae) {
@@ -132,6 +123,25 @@ public class UserActionsService {
         }
 
         return ResponseEntity.noContent().build();
+    }
+
+    private boolean isListTooLarge(int currentSize) {
+        return currentSize > 2 * MAX_LIST_SIZE;
+    }
+
+    private void removeOutdatedRecords(Record newRecord, int currentSize, Key key) {
+        Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
+        WritePolicy writePolicy = createWritePolicy(newRecord);
+        client.operate(writePolicy, key, trimOperation);
+        log.info("just trimmed the list - it had {} records", currentSize);
+    }
+
+    private WritePolicy createWritePolicy(Record record) {
+        WritePolicy writePolicy = new WritePolicy();
+        writePolicy.recordExistsAction = RecordExistsAction.UPDATE;  
+        writePolicy.generationPolicy = (record != null) ? GenerationPolicy.EXPECT_GEN_EQUAL : GenerationPolicy.NONE;
+        writePolicy.generation = (record != null) ? record.generation : 0;
+        return writePolicy;
     }
 
 

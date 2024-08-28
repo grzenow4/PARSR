@@ -389,6 +389,12 @@ cd aerospike
 ansible-playbook --extra-vars "ansible_user=<user> ansible_password=<password> ansible_ssh_extra_args='-o StrictHostKeyChecking=no'" -i hosts aerospike.yaml
 (It will start aerospike on vm101 and vm102)
 
+Important: before each start of the testing platform, cleanup the database.
+[vm101] - sudo bash clean.sh
+[vm102] - sudo bash clean.sh
+[vm101] - sudo systemctl start aerospike
+[vm102] - sudo systemctl start aerospike
+
 
 vm101, vm104, vm106: (java service)
 sudo apt install maven

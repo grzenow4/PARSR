@@ -382,32 +382,39 @@ We decided not to put HTTP specs of the API in this document. If someone wants t
 
 # How to run the app (for now)
 Clone the repository on 5 machines, switch to add-aerospike branch.
+
 Everywhere, switch st124 to st<your number>, vm numbers can also be changed obviously.
-vm101: (database)
+
+## vm101: (database)
+```
 sudo apt -y install ansible sshpass
 cd aerospike
 ansible-playbook --extra-vars "ansible_user=<user> ansible_password=<password> ansible_ssh_extra_args='-o StrictHostKeyChecking=no'" -i hosts aerospike.yaml
+```
 (It will start aerospike on vm101 and vm102)
 
-Important: before each start of the testing platform, cleanup the database.
-[vm101] - sudo bash clean.sh
-[vm102] - sudo bash clean.sh
-[vm101] - sudo systemctl start aerospike
-[vm102] - sudo systemctl start aerospike
+Important: before each start of the testing platform, cleanup the database. (vm101, vm102)
+```
+sudo bash clean.sh
+sudo systemctl start aerospike
+```
 
-
-vm101, vm104, vm106: (java service)
+## vm101, vm104, vm106: (java service)
+```
 sudo apt install maven
 mvn clean install
 mvn spring-boot:app
+```
 
-vm105: (load balancer)
+## vm105: (load balancer)
+```
 sudo docker build -t my-proxy .
 sudo docker run --network=host --privileged my-proxy
+```
 (you can monitor it on stXYZvmANC.rtb-lab.pl:10000)
------------------------------------------------------
-todo:
-1. containerize the app, to make deploymeant easier (no git clone etc)
-   write scripts for quicker setup (the fewer commands the better)
-2. add use case 3 implementation
 
+# Todo:
+1. containerize the app, to make deploymeant easier (no git clone etc)
+   
+   write scripts for quicker setup (the fewer commands the better)
+1. add use case 3 implementation

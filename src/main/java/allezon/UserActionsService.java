@@ -46,6 +46,7 @@ import com.aerospike.client.task.IndexTask;
 import com.aerospike.client.query.Filter;
 import com.aerospike.client.query.IndexType;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
@@ -62,11 +63,13 @@ public class UserActionsService {
 
     private static final Logger log = LoggerFactory.getLogger(UserActionsResource.class);
 
+    private ObjectMapper mapper;
     private AerospikeClient client;
-    Map<String, Map<Action, LinkedList<UserTagEvent>>> events = new ConcurrentHashMap<>();
 
     public UserActionsService(@Value("${aerospike.seeds}") String[] aerospikeSeeds, @Value("${aerospike.port}") int port) {
         this.client = new AerospikeClient(defaultClientPolicy(), Arrays.stream(aerospikeSeeds).map(seed -> new Host(seed, port)).toArray(Host[]::new));
+        mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
     }
 
     private static ClientPolicy defaultClientPolicy() {
@@ -84,35 +87,11 @@ public class UserActionsService {
 
     public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.registerModule(new JavaTimeModule());
             String serializedEvent = mapper.writeValueAsString(userTag);
-
-            String keyString = userTag.getCookie() + ":" + userTag.getAction();
-            Key key = new Key(NAMESPACE, SET, keyString);
-
-            while (true) {
-                Record record = client.get(null, key);
-                // Append the new tag to the list
-                Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
-                Operation sizeOperation = ListOperation.size("tags");
-
-                WritePolicy writePolicy = createWritePolicy(record);
-                try {
-                    Record newRecord = client.operate(writePolicy, key, appendOperation, sizeOperation);
-                    int currentSize = Integer.valueOf(newRecord.getList("tags").get(0).toString());
-
-                    if (isListTooLarge(currentSize)) {
-                        removeOutdatedRecords(newRecord, currentSize, key);
-                    }
-                    break;
-                } catch (AerospikeException ae) {
-                    if (ae.getResultCode() == ResultCode.GENERATION_ERROR) {
-                        log.info("Generation error, retrying...");
-                    } else {
-                        throw ae; // For other exceptions, rethrow
-                    }
-                }
+            Key key = createKey(userTag.getCookie(), userTag.getAction());
+            boolean success = false;
+            while (!success) {
+                success = saveUserTag(serializedEvent, key);
             }
         } catch (JsonProcessingException e) {
             log.error("Serialization failed", e);
@@ -121,6 +100,46 @@ public class UserActionsService {
         }
 
         return ResponseEntity.noContent().build();
+    }
+
+    public ResponseEntity<UserProfileResult> getUserProfile(String cookie,
+                                                            String timeRangeStr,
+                                                            int limit,
+                                                            UserProfileResult expectedResult) {
+        TimeBound timeBound = getTimeBounds(timeRangeStr);
+        List<UserTagEvent> views = getUserTagsForAction(cookie, Action.VIEW, timeBound, limit);
+        List<UserTagEvent> buys = getUserTagsForAction(cookie, Action.BUY, timeBound, limit);
+        UserProfileResult myResult = new UserProfileResult(cookie, views, buys);
+        return ResponseEntity.ok(myResult);
+    }
+
+    private boolean saveUserTag(String serializedEvent, Key key) {
+        Record record = client.get(null, key);
+        Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
+        Operation sizeOperation = ListOperation.size("tags");
+
+        WritePolicy writePolicy = createWritePolicy(record);
+        try {
+            Record newRecord = client.operate(writePolicy, key, appendOperation, sizeOperation);
+            int currentSize = Integer.valueOf(newRecord.getList("tags").get(0).toString());
+
+            if (isListTooLarge(currentSize)) {
+                removeOutdatedRecords(newRecord, currentSize, key);
+            }
+            return true;
+        } catch (AerospikeException ae) {
+            if (ae.getResultCode() == ResultCode.GENERATION_ERROR) {
+                log.info("Generation error, retrying...");
+                return false;
+            } else {
+                throw ae; // For other exceptions, rethrow
+            }
+        }
+    }
+
+    private Key createKey(String cookie, Action action) {
+        String keyString = cookie + ":" + action;
+        return new Key(NAMESPACE, SET, keyString);
     }
 
     private boolean isListTooLarge(int currentSize) {
@@ -142,97 +161,63 @@ public class UserActionsService {
         return writePolicy;
     }
 
-    private List<UserTagEvent> getUserTagsForAction(String cookie, Action action, TimeBound timeBound, int limit) {
-        // log.info("looking for {} for cookie {}", action, cookie);
-        List<UserTagEvent> userTags = new ArrayList<>();
-
-        // Create a unique key for the user tag list
-        String keyString = cookie + ":" + action;
-        Key key = new Key(NAMESPACE, SET, keyString);
-
-        // ReadPolicy to specify read behavior
+    private Policy createReadPolicy() {
         Policy readPolicy = new Policy(client.readPolicyDefault);
         readPolicy.socketTimeout = 1000;
         readPolicy.totalTimeout = 1000;
+        return readPolicy;
+    }
+
+    private List<UserTagEvent> getUserTagsForAction(String cookie, Action action, TimeBound timeBound, int limit) {
+        List<UserTagEvent> userTags = new ArrayList<>();
+        Key key = createKey(cookie, action);
+        Policy readPolicy = createReadPolicy();
 
         try {
-            // Fetch the list of tags from Aerospike
             Record record = client.get(readPolicy, key);
             if (record != null) {
-                // Safely cast the result to a List of Strings
                 List<?> rawList = record.getList("tags");
                 if (rawList != null) {
-                    List<String> serializedEvents = rawList.stream()
-                                                          .map(Object::toString)
-                                                          .collect(Collectors.toList());
-                    ObjectMapper mapper = new ObjectMapper();
-                    mapper.registerModule(new JavaTimeModule());
-                    // Deserialize and filter the tags based on the time range
+                    List<String> serializedEvents = getSerializedEvents(rawList);
                     for (String serializedEvent : serializedEvents) {
-                        UserTagEvent userTag = mapper.readValue(serializedEvent, UserTagEvent.class);
-
-                        if (!userTag.getTime().isBefore(timeBound.getStartDate()) &&
-                            userTag.getTime().isBefore(timeBound.getEndDate())) {
-                            userTags.add(userTag);
-                        }
+                        appendUserTagList(serializedEvent, timeBound, userTags);
                     }
-
-                    // Sort and limit the results
-                    userTags = userTags.stream()
-                            .sorted((e1, e2) -> e2.getTime().compareTo(e1.getTime()))
-                            .limit(limit)
-                            .collect(Collectors.toList());
+                    userTags = sortAndLimitUserTags(userTags, limit);
                 }
             }
         } catch (Exception e) {
             log.error("Failed to retrieve UserTagEvents for action {}", action, e);
         }
-        // log.info("for {} found {} events", keyString, userTags.size());
         return userTags;
     }
-    
-    public ResponseEntity<UserProfileResult> getUserProfile(String cookie,
-                                                            String timeRangeStr,
-                                                            int limit,
-                                                            UserProfileResult expectedResult) {
-        TimeBound timeBound;
-        try {
-            timeBound = getTimeBounds(timeRangeStr);
-        } catch (Exception e) {
-            log.error("Failed to parse time range", e);
-            return ResponseEntity.badRequest().build();
-        }
-        List<UserTagEvent> views = getUserTagsForAction(cookie, Action.VIEW, timeBound, limit);
-        List<UserTagEvent> buys = getUserTagsForAction(cookie, Action.BUY, timeBound, limit);
-        UserProfileResult myResult = new UserProfileResult(cookie, views, buys);
-        return ResponseEntity.ok(myResult);
+
+    private List<String> getSerializedEvents(List<?> rawList) {
+        return rawList.stream()
+                    .map(Object::toString)
+                    .collect(Collectors.toList());
     }
 
-    private TimeBound getTimeBounds(String timeRangeStr) throws Exception {
+    private List<UserTagEvent> sortAndLimitUserTags(List<UserTagEvent> userTags, int limit) {
+        return userTags.stream()
+                .sorted((e1, e2) -> e2.getTime().compareTo(e1.getTime()))
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    private void appendUserTagList(String serializedEvent, TimeBound timeBound, List<UserTagEvent> userTags) throws JsonMappingException, JsonProcessingException {
+        UserTagEvent userTag = mapper.readValue(serializedEvent, UserTagEvent.class);
+
+        if (!userTag.getTime().isBefore(timeBound.getStartDate()) &&
+            userTag.getTime().isBefore(timeBound.getEndDate())) {
+            userTags.add(userTag);
+        }
+    }
+
+    private TimeBound getTimeBounds(String timeRangeStr) {
         String[] timeRangeParts = timeRangeStr.split("_");
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss[.SSS]");
         LocalDateTime fromTime = LocalDateTime.parse(timeRangeParts[0], formatter);
         LocalDateTime toTime = LocalDateTime.parse(timeRangeParts[1], formatter);
         return new TimeBound(fromTime.toInstant(ZoneOffset.UTC), toTime.toInstant(ZoneOffset.UTC));
     }
-
-    private List<UserTagEvent> getEventsByAction(String cookie, int limit, TimeBound timeBound, Action action) {
-        return events.get(cookie).getOrDefault(action, new LinkedList<>()).stream()
-            .sorted(Comparator.comparing(UserTagEvent::getTime).reversed())
-            .filter(e -> !e.getTime().isBefore(timeBound.getStartDate()) && e.getTime().isBefore(timeBound.getEndDate()))
-            .limit(limit)
-            .collect(Collectors.toList());
-    }
-
-    private void logDiscrepancies(UserProfileResult expectedResult, UserProfileResult myResult) {
-        if (expectedResult != null) {
-            if (myResult.getViews().size() != expectedResult.getViews().size()) {
-                log.info("Wrong view count. Expected {}, got {}", expectedResult.getViews().size(), myResult.getViews().size());
-            }
-            if (myResult.getBuys().size() != expectedResult.getBuys().size()) {
-                log.info("Wrong buy count. Expected {}, got {}", expectedResult.getBuys().size(), myResult.getBuys().size());
-            }
-        }
-    }
-
 }

@@ -380,41 +380,22 @@ We decided not to put HTTP specs of the API in this document. If someone wants t
 * Automated and managed deployment is preferred. Shell scripts, Ansible, Docker Swarm + Docker Stack, Kubernetes - there is a plethora of available options.
 
 
-# How to run the app (for now)
-Clone the repository on 5 machines, switch to add-aerospike branch.
+# How to run the app
+Clone the repository on vm101.
 
 Everywhere, switch st124 to st<your number>, vm numbers can also be changed obviously.
 
-## vm101: (database)
+Execute the following commands:
 ```
-sudo apt -y install ansible sshpass
-cd aerospike
-ansible-playbook --extra-vars "ansible_user=<user> ansible_password=<password> ansible_ssh_extra_args='-o StrictHostKeyChecking=no'" -i hosts aerospike.yaml
+sudo apt -y install ansible sshpass maven
+./deploy.sh <user> <password>
 ```
-(It will start aerospike on vm101 and vm102)
 
-Important: before each start of the testing platform, cleanup the database. (vm101, vm102)
+Important: before each start of the testing platform, cleanup the database. (aerospike VMs)
 ```
 sudo bash clean.sh
 sudo systemctl start aerospike
 ```
 
-## vm101, vm104, vm106: (java service)
-```
-sudo apt install maven
-mvn clean install
-mvn spring-boot:app
-```
-
-## vm105: (load balancer)
-```
-sudo docker build -t my-proxy .
-sudo docker run --network=host --privileged my-proxy
-```
-(you can monitor it on stXYZvmANC.rtb-lab.pl:10000)
-
 # Todo:
-1. containerize the app, to make deploymeant easier (no git clone etc)
-   
-   write scripts for quicker setup (the fewer commands the better)
 1. add use case 3 implementation

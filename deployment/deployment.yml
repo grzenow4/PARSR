@@ -1,0 +1,67 @@
+---
+- name: Deploy Docker images
+  hosts: master
+
+  vars:
+    app_image_name: allezon
+    app_image_file: /tmp/allezon.tar
+    balancer_image_name: my-proxy
+    balancer_image_file: /tmp/my-proxy.tar
+
+  tasks:
+    - name: Save app image to a tar file
+      command: docker save -o {{ app_image_file }} {{ app_image_name }}
+
+    - name: Save load balancer image to a tar file
+      command: docker save -o {{ balancer_image_file }} {{ balancer_image_name }}
+
+    - name: Copy app image to nodes
+      copy:
+        src: "{{ app_image_file }}"
+        dest: "{{ app_image_file }}"
+      delegate_to: "{{ item }}"
+      with_items: "{{ groups['nodes'] }}"
+
+    - name: Copy load balancer image to the load balancer node
+      copy:
+        src: "{{ balancer_image_file }}"
+        dest: "{{ balancer_image_file }}"
+      delegate_to: "{{ groups['load_balancer'][0] }}"
+
+- name: Load Docker image and run app container on all nodes
+  hosts: master,nodes
+
+  vars:
+    docker_image_name: allezon
+    docker_image_file: /tmp/allezon.tar
+    container_name: allezon_container
+
+  tasks:
+    - name: Load Docker image from tar file
+      command: docker load -i {{ docker_image_file }}
+
+    - name: Remove existing container if it exists
+      command: docker rm -f {{ container_name }}
+      ignore_errors: yes
+
+    - name: Run Docker container
+      command: docker run -d --network=host --name {{ container_name }} {{ docker_image_name }}
+
+- name: Load Docker image and run load balancer container
+  hosts: load_balancer
+
+  vars:
+    docker_image_name: my-proxy
+    docker_image_file: /tmp/my-proxy.tar
+    container_name: my_proxy_container
+
+  tasks:
+    - name: Load Docker image from tar file
+      command: docker load -i {{ docker_image_file }}
+
+    - name: Remove existing container if it exists
+      command: docker rm -f {{ container_name }}
+      ignore_errors: yes
+
+    - name: Run Docker container
+      command: docker run -d --network=host --privileged --name {{ container_name }} {{ docker_image_name }}

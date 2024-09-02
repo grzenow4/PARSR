@@ -34,7 +34,7 @@ import java.util.Random;
 
 @Configuration
 public class KafkaStreamsConfig {
-    private final static String APP_ID = "allezon-analytics";
+    private final static String APP_ID = "allezon_analytics_app_1";
     public final static String STATE_STORE_NAME_KEY_VALUE_NAME = "allezon-s-s-1";
     private final static String STATE_STORE_OUTPUT_TOPIC = "allezon-aggregated-actions-input";
     public final static String ANALYTICS_INPUT_TOPIC = "analytics-input";

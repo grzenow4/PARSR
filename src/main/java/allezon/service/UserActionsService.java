@@ -165,7 +165,8 @@ public class UserActionsService {
             log.info("I actually got something! {}:{}", value.getCount(), value.getPrice());
             rows.add(createRow(bucket, timeRangeStr, aggregates, origin, brandId, categoryId, value));
         }          
-        AggregatesQueryResult result = new AggregatesQueryResult(columns, rows);                                           
+        AggregatesQueryResult result = new AggregatesQueryResult(columns, rows);       
+        log.info("actually got some values....");     
         return ResponseEntity.ok(result);                                                        
     }
 

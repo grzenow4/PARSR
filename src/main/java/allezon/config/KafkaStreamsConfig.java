@@ -30,6 +30,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import java.util.Random; 
 
 @Configuration
 public class KafkaStreamsConfig {
@@ -44,62 +45,40 @@ public class KafkaStreamsConfig {
     @Bean
     public Properties kafkaStreamsProperties() {
         Properties props = new Properties();
-        props.put(StreamsConfig.APPLICATION_ID_CONFIG, APP_ID);
+        props.put(StreamsConfig.APPLICATION_ID_CONFIG, APP_ID + new Random().nextInt(100));
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
-        JsonSerde<UserTagEvent> valueSerde = new JsonSerde<>(UserTagEvent.class);
-        props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, valueSerde);
+        props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, JsonSerde.class.getName());
         return props;
     }
-
-
-    @Bean
-    public JsonSerde<UserTagEvent> userTagEventSerde() {
-        return new JsonSerde<>(UserTagEvent.class);
-    }
-
-    @Bean
-    public JsonSerde<AggregatedValue> aggregatedValueSerde() {
-        return new JsonSerde<>(AggregatedValue.class);
-    }
-
 
     @Bean
     public KafkaStreams kafkaStreams(
             StreamsBuilder builder,
-            JsonSerde<UserTagEvent> userTagEventSerde,
-            JsonSerde<AggregatedValue> aggregatedValueSerde,
             Properties kafkaStreamsProperties) {
-
-        // Create the stream
-        KStream<String, UserTagEvent> userTagEventsStream = builder.stream(ANALYTICS_INPUT_TOPIC, Consumed.with(Serdes.String(), userTagEventSerde));
-
-        // Define the state store
-        StoreBuilder<org.apache.kafka.streams.state.KeyValueStore<String, AggregatedValue>> storeBuilder =
-                Stores.keyValueStoreBuilder(
-                        Stores.persistentKeyValueStore(STATE_STORE_NAME_KEY_VALUE_NAME),
-                        Serdes.String(),
-                        aggregatedValueSerde
-                );
-
-        builder.addStateStore(storeBuilder);
-
-        // FlatMap to produce multiple records with different keys based on UserTagEvent fields
+    
+        JsonSerde<UserTagEvent> userTagEventSerde = new JsonSerde<>(UserTagEvent.class);
+        JsonSerde<AggregatedValue> aggregatedValueSerde = new JsonSerde<>(AggregatedValue.class);
+    
+        KStream<String, UserTagEvent> userTagEventsStream = builder.stream(
+                ANALYTICS_INPUT_TOPIC,
+                Consumed.with(Serdes.String(), userTagEventSerde)
+        );
+    
         KStream<String, AggregatedValue> aggregatedStream = userTagEventsStream
-            .flatMap((key, userTagEvent) -> reKeyInputStream(userTagEvent))
-            .groupByKey()
-            .aggregate(
-                AggregatedValue::new,
-                (key, value, aggregate) -> aggregate.aggregateProduct(value),
-                Materialized.<String, AggregatedValue, org.apache.kafka.streams.state.KeyValueStore<Bytes, byte[]>>as(STATE_STORE_NAME_KEY_VALUE_NAME)
-                        .withKeySerde(Serdes.String())
-                        .withValueSerde(aggregatedValueSerde)
-            )
-            .toStream();
-
-        // Output the aggregated results to a single topic
-        aggregatedStream.to(STATE_STORE_OUTPUT_TOPIC, Produced.with(Serdes.String(), aggregatedValueSerde));
-
+                .flatMap((key, userTagEvent) -> reKeyInputStream(userTagEvent))
+                .groupByKey(
+                    Grouped.with(Serdes.String(), Serdes.Integer())
+                )
+                .aggregate(
+                        AggregatedValue::new,
+                        (key, value, aggregate) -> aggregate.aggregateProduct(value),
+                        Materialized.<String, AggregatedValue, KeyValueStore<Bytes, byte[]>>as(STATE_STORE_NAME_KEY_VALUE_NAME)
+                                .withKeySerde(Serdes.String())
+                                .withValueSerde(aggregatedValueSerde)
+                )
+                .toStream();
+    
         KafkaStreams streams = new KafkaStreams(builder.build(), kafkaStreamsProperties);
         streams.start();
         return streams;

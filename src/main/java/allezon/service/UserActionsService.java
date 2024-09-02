@@ -246,7 +246,9 @@ public class UserActionsService {
 
     private void sendToAnalytics(UserTagEvent userTag) {
         String kafkaKey = generate1MinuteBucket(userTag.getTime()) + ":" + userTag.getAction().toString();
+        log.info("try..");
         kafkaProducer.send(new ProducerRecord<String, UserTagEvent>(KafkaStreamsConfig.ANALYTICS_INPUT_TOPIC, kafkaKey, userTag));    
+        log.info("sent to analytics");
     }
 
     private String generate1MinuteBucket(Instant timestamp) {

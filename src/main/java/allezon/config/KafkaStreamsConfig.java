@@ -46,7 +46,7 @@ public class KafkaStreamsConfig {
     public Properties kafkaStreamsProperties() {
         Properties props = new Properties();
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, APP_ID + new Random().nextInt(100));
-        props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
+        props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "st124vm101.rtb-lab.pl:9092");
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, JsonSerde.class.getName());
         return props;

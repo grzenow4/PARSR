@@ -1,4 +1,4 @@
-package allezon;
+package allezon.service;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -13,9 +13,18 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.time.temporal.ChronoUnit;
 
+import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.StoreQueryParameters;
+import org.apache.kafka.streams.state.QueryableStoreTypes;
+import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -51,23 +60,43 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import allezon.domain.Action;
+import allezon.domain.Aggregate;
+import allezon.domain.AggregatedValue;
+import allezon.domain.AggregatesQueryResult;
 import allezon.domain.TimeBound;
 import allezon.domain.UserProfileResult;
 import allezon.domain.UserTagEvent;
+import allezon.config.KafkaStreamsConfig;
 
 @Service
 public class UserActionsService {
+    public static final String BUCKET_COLUMN_NAME = "1m_bucket";
+    public static final String ACTION_COLUMN_NAME = "action";
+    public static final String ORIGIN_COLUMN_NAME = "origin";
+    public static final String BRAND_COLUMN_NAME = "brand_id";
+    public static final String CATEGORY_COLUMN_NAME = "category_id";
+    public static final String COUNT_COLUMN_NAME = "count";
+    public static final String SUM_PRICE_COLUMN_NAME = "sum_price";
+
     private static final String NAMESPACE = "parsr";
-    private static final String SET = "user_tags";
+    private static final String SET_USER_TAGS = "user_tags";
     private static final int MAX_LIST_SIZE = 200;
+    public static final DateTimeFormatter BUCKET_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss[.SSS]").withZone(ZoneOffset.UTC);
 
     private static final Logger log = LoggerFactory.getLogger(UserActionsResource.class);
-
+    private final Producer<String, UserTagEvent> kafkaProducer;
     private ObjectMapper mapper;
     private AerospikeClient client;
+    private final KafkaStreams streams;
 
-    public UserActionsService(@Value("${aerospike.seeds}") String[] aerospikeSeeds, @Value("${aerospike.port}") int port) {
+    @Autowired
+    public UserActionsService(@Value("${aerospike.seeds}") String[] aerospikeSeeds, 
+                                @Value("${aerospike.port}") int port, 
+                                KafkaStreams streams,
+                                Producer<String, UserTagEvent> kafkaProducer) {
         this.client = new AerospikeClient(defaultClientPolicy(), Arrays.stream(aerospikeSeeds).map(seed -> new Host(seed, port)).toArray(Host[]::new));
+        this.streams = streams;
+        this.kafkaProducer = kafkaProducer;
         mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
     }
@@ -93,6 +122,7 @@ public class UserActionsService {
             while (!success) {
                 success = saveUserTag(serializedEvent, key);
             }
+            sendToAnalytics(userTag);
         } catch (JsonProcessingException e) {
             log.error("Serialization failed", e);
         } catch (Exception e) {
@@ -112,6 +142,82 @@ public class UserActionsService {
         UserProfileResult myResult = new UserProfileResult(cookie, views, buys);
         return ResponseEntity.ok(myResult);
     }
+
+    public ResponseEntity<AggregatesQueryResult> getAggregates(String timeRangeStr,
+                                                               Action action,
+                                                               List<Aggregate> aggregates,
+                                                               String origin,
+                                                               String brandId,
+                                                               String categoryId,
+                                                               AggregatesQueryResult expectedResult) {
+        log.info("got request for aggregates!");
+        ReadOnlyKeyValueStore<String, AggregatedValue> store = streams.store(StoreQueryParameters.fromNameAndType(
+            KafkaStreamsConfig.STATE_STORE_NAME_KEY_VALUE_NAME, 
+            QueryableStoreTypes.keyValueStore()
+    )
+        );            
+        List<String> timeBuckets = getTimeBuckets(timeRangeStr);
+        List<String> columns = createColumnNames(origin, brandId, categoryId, aggregates);
+        List<List<String>> rows = new LinkedList<>();
+        for (String bucket : timeBuckets) {
+            log.info("asking for value for key {}", bucket + ":" + action.toString());
+            AggregatedValue value = store.get(bucket + ":" + action.toString());
+            log.info("I actually got something! {}:{}", value.getCount(), value.getPrice());
+            rows.add(createRow(bucket, timeRangeStr, aggregates, origin, brandId, categoryId, value));
+        }          
+        AggregatesQueryResult result = new AggregatesQueryResult(columns, rows);                                           
+        return ResponseEntity.ok(result);                                                        
+    }
+
+
+    private List<String> createColumnNames(String origin, String brandId, String categoryId, List<Aggregate> aggregates) {
+        List<String> columns = Arrays.asList(BUCKET_COLUMN_NAME, ACTION_COLUMN_NAME);
+        if (origin != null) {
+            columns.add(ORIGIN_COLUMN_NAME);
+        }
+        if (brandId != null) {
+            columns.add(BRAND_COLUMN_NAME);
+        }
+        if (categoryId != null) {
+            columns.add(CATEGORY_COLUMN_NAME);
+        }
+        for (Aggregate field : aggregates) {
+            if (Aggregate.COUNT.equals(field)) {
+                columns.add(COUNT_COLUMN_NAME);
+            } else {
+                columns.add(SUM_PRICE_COLUMN_NAME);
+            }
+        }
+        return columns;
+    }
+
+    private List<String> createRow(String timeBucket,
+                            String action,
+                            List<Aggregate> aggregates,
+                            String origin,
+                            String brandId,
+                            String categoryId,
+                            AggregatedValue value) {
+        List<String> row = Arrays.asList(timeBucket, action);
+        if (origin != null) {
+            row.add(origin);
+        }
+        if (brandId != null) {
+            row.add(brandId);
+        }
+        if (categoryId != null) {
+            row.add(categoryId);
+        }
+        for (Aggregate field : aggregates) {
+            if (Aggregate.COUNT.equals(field)) {
+                row.add(String.valueOf(value.getCount()));
+            } else {
+                row.add(String.valueOf(value.getPrice()));
+            }
+        }
+        return row;
+    }
+
 
     private boolean saveUserTag(String serializedEvent, Key key) {
         Record record = client.get(null, key);
@@ -137,9 +243,20 @@ public class UserActionsService {
         }
     }
 
+    private void sendToAnalytics(UserTagEvent userTag) {
+        String kafkaKey = generate1MinuteBucket(userTag.getTime()) + ":" + userTag.getAction().toString();
+        kafkaProducer.send(new ProducerRecord<String, UserTagEvent>(KafkaStreamsConfig.ANALYTICS_INPUT_TOPIC, kafkaKey, userTag));    
+    }
+
+    private String generate1MinuteBucket(Instant timestamp) {
+        // Truncate to the nearest minute and format it
+        Instant truncatedTime = timestamp.truncatedTo(ChronoUnit.MINUTES);
+        return BUCKET_FORMATTER.format(truncatedTime);
+    }
+
     private Key createKey(String cookie, Action action) {
         String keyString = cookie + ":" + action;
-        return new Key(NAMESPACE, SET, keyString);
+        return new Key(NAMESPACE, SET_USER_TAGS, keyString);
     }
 
     private boolean isListTooLarge(int currentSize) {
@@ -220,4 +337,9 @@ public class UserActionsService {
         LocalDateTime toTime = LocalDateTime.parse(timeRangeParts[1], formatter);
         return new TimeBound(fromTime.toInstant(ZoneOffset.UTC), toTime.toInstant(ZoneOffset.UTC));
     }
+
+    private List<String> getTimeBuckets(String timeRangeStr) {
+        return Arrays.asList(timeRangeStr.split("_"));       
+    }
+
 }

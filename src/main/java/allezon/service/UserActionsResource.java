@@ -1,4 +1,4 @@
-package allezon;
+package allezon.service;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -58,7 +58,6 @@ public class UserActionsResource {
             @RequestParam(value = "brand_id", required = false) String brandId,
             @RequestParam(value = "category_id", required = false) String categoryId,
             @RequestBody(required = false) AggregatesQueryResult expectedResult) {
-
-        return ResponseEntity.ok(expectedResult);
+        return userActionsService.getAggregates(timeRangeStr, action, aggregates, origin, brandId, categoryId, expectedResult);
     }
 }

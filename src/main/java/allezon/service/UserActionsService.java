@@ -221,12 +221,12 @@ public class UserActionsService {
 
 
     private boolean saveUserTag(String serializedEvent, Key key) {
-        Record record = client.get(null, key);
-        Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
-        Operation sizeOperation = ListOperation.size("tags");
-
-        WritePolicy writePolicy = createWritePolicy(record);
         try {
+            Record record = client.get(null, key);
+            Operation appendOperation = ListOperation.append("tags", com.aerospike.client.Value.get(serializedEvent));
+            Operation sizeOperation = ListOperation.size("tags");
+    
+            WritePolicy writePolicy = createWritePolicy(record);
             Record newRecord = client.operate(writePolicy, key, appendOperation, sizeOperation);
             int currentSize = Integer.valueOf(newRecord.getList("tags").get(0).toString());
 
@@ -242,6 +242,9 @@ public class UserActionsService {
                 log.error("Error in addEvent", ae);
                 throw ae; // For other exceptions, rethrow
             }
+        } catch (Exception e) {
+            log.error("Some other exception", e);
+            throw e;
         }
     }
 

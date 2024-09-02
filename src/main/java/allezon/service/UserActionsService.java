@@ -239,6 +239,7 @@ public class UserActionsService {
                 log.info("Generation error, retrying...");
                 return false;
             } else {
+                log.error("Error in addEvent", ae);
                 throw ae; // For other exceptions, rethrow
             }
         }

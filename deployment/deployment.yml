@@ -1,6 +1,7 @@
 ---
 - name: Deploy Docker images
   hosts: master
+  become: yes
 
   vars:
     app_image_name: allezon
@@ -14,6 +15,20 @@
 
     - name: Save load balancer image to a tar file
       command: docker save -o {{ balancer_image_file }} {{ balancer_image_name }}
+
+    - name: Ensure the app image tar file is readable by all users
+      file:
+        path: "{{ app_image_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Ensure the load balancer image tar file is readable by all users
+      file:
+        path: "{{ balancer_image_file }}"
+        owner: root
+        group: root
+        mode: '0644'
 
     - name: Copy app image to nodes
       copy:
@@ -30,6 +45,7 @@
 
 - name: Load Docker image and run app container on all nodes
   hosts: master,nodes
+  become: yes
 
   vars:
     docker_image_name: allezon
@@ -37,6 +53,10 @@
     container_name: allezon_container
 
   tasks:
+    - name: Remove existing image if it exists
+      command: docker image rm -f {{ docker_image_name }}
+      ignore_errors: yes
+
     - name: Load Docker image from tar file
       command: docker load -i {{ docker_image_file }}
 
@@ -49,6 +69,7 @@
 
 - name: Load Docker image and run load balancer container
   hosts: load_balancer
+  become: yes
 
   vars:
     docker_image_name: my-proxy
@@ -56,6 +77,10 @@
     container_name: my_proxy_container
 
   tasks:
+    - name: Remove existing image if it exists
+      command: docker image rm -f {{ docker_image_name }}
+      ignore_errors: yes
+
     - name: Load Docker image from tar file
       command: docker load -i {{ docker_image_file }}
 

@@ -166,7 +166,8 @@ public class UserActionsService {
             rows.add(createRow(bucket, timeRangeStr, aggregates, origin, brandId, categoryId, value));
         }          
         AggregatesQueryResult result = new AggregatesQueryResult(columns, rows);       
-        log.info("actually got some values....");     
+        log.info("actually got some values....");
+        log.info("{}", result.toString());     
         return ResponseEntity.ok(result);                                                        
     }
 
@@ -250,9 +251,7 @@ public class UserActionsService {
 
     private void sendToAnalytics(UserTagEvent userTag) {
         String kafkaKey = generate1MinuteBucket(userTag.getTime()) + ":" + userTag.getAction().toString();
-        log.info("try..");
         kafkaProducer.send(new ProducerRecord<String, UserTagEvent>(KafkaStreamsConfig.ANALYTICS_INPUT_TOPIC, kafkaKey, userTag));    
-        log.info("sent to analytics");
     }
 
     private String generate1MinuteBucket(Instant timestamp) {

@@ -34,7 +34,7 @@ import java.util.Random;
 
 @Configuration
 public class KafkaStreamsConfig {
-    private final static String APP_ID = "allezon_analytics_app_1";
+    private final static String APP_ID = "allezon-analytics-app";
     public final static String STATE_STORE_NAME_KEY_VALUE_NAME = "allezon-s-s-1";
     private final static String STATE_STORE_OUTPUT_TOPIC = "allezon-aggregated-actions-input";
     public final static String ANALYTICS_INPUT_TOPIC = "analytics-input";
@@ -45,7 +45,7 @@ public class KafkaStreamsConfig {
     @Bean
     public Properties kafkaStreamsProperties() {
         Properties props = new Properties();
-        props.put(StreamsConfig.APPLICATION_ID_CONFIG, APP_ID + new Random().nextInt(100));
+        props.put(StreamsConfig.APPLICATION_ID_CONFIG, APP_ID);
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "st124vm101.rtb-lab.pl:9092");
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, JsonSerde.class.getName());
@@ -80,6 +80,11 @@ public class KafkaStreamsConfig {
                 .toStream();
     
         KafkaStreams streams = new KafkaStreams(builder.build(), kafkaStreamsProperties);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            streams.close(Duration.ofSeconds(10));
+            streams.cleanUp();
+        }));
+        
         streams.start();
         return streams;
     }

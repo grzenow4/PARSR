@@ -1,0 +1,11 @@
+[master]
+st124vm101.rtb-lab.pl
+
+[nodes]
+st124vm1[07:10].rtb-lab.pl
+
+[load_balancer]
+st124vm106.rtb-lab.pl
+
+[aerospike]
+st124vm1[02:05].rtb-lab.pl

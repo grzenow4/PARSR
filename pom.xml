@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.rtbhouse.mimuw</groupId>
-    <artifactId>project-bootstrap</artifactId>
+    <artifactId>allezon</artifactId>
     <version>1.0</version>
 
     <properties>
@@ -131,7 +131,7 @@
                         </executions>
                         <configuration>
                             <repository>${project.artifactId}</repository>
-                            <tag>${git.commit.id.full}</tag>
+                            <tag>latest</tag>
                             <buildArgs>
                                 <JAR_FILE>target/${project.build.finalName}.jar</JAR_FILE>
                             </buildArgs>

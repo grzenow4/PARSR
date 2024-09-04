@@ -2,10 +2,10 @@
 st124vm101.rtb-lab.pl
 
 [nodes]
-st124vm1[08:10].rtb-lab.pl
+st124vm1[07:10].rtb-lab.pl
 
 [load_balancer]
-st124vm105.rtb-lab.pl
+st124vm106.rtb-lab.pl
 
 [aerospike]
-st124vm1[01:02].rtb-lab.pl
+st124vm1[02:05].rtb-lab.pl

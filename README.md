@@ -394,7 +394,11 @@ sudo apt -y install ansible sshpass maven
 Important: before each start of the testing platform, cleanup the database. (aerospike VMs)
 ```
 sudo bash clean.sh
-sudo systemctl start aerospike
+```
+or (cloning not needed)
+```
+sudo systemctl stop aerospike
+sudo rm -rf /opt/aerospike/data/parsr*
 ```
 
 # Todo:

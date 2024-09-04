@@ -44,7 +44,7 @@
       delegate_to: "{{ groups['load_balancer'][0] }}"
 
 - name: Load Docker image and run app container on all nodes
-  hosts: master,nodes
+  hosts: nodes
   become: yes
 
   vars:

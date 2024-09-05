@@ -1,0 +1,49 @@
+- name: Stop and remove app containers
+  hosts: nodes
+  become: yes
+
+  vars:
+    image_name: allezon
+    container_name: allezon_container
+
+  tasks:
+    - name: Remove Docker image
+      command: docker image rm -f {{ image_name }}
+      ignore_errors: yes
+
+    - name: Stop and remove Docker container
+      command: docker rm -f {{ container_name }}
+      ignore_errors: yes
+
+- name: Stop and remove load balancer container
+  hosts: load_balancer
+  become: yes
+
+  vars:
+    image_name: my-proxy
+    container_name: my_proxy_container
+
+  tasks:
+    - name: Remove Docker image
+      command: docker image rm -f {{ image_name }}
+      ignore_errors: yes
+
+    - name: Stop and remove Docker container
+      command: docker rm -f {{ container_name }}
+      ignore_errors: yes
+
+- name: Clean aerospike database
+  hosts: aerospike
+  become: yes
+
+  tasks:
+    - name: Stop aerospike
+      command: systemctl stop aerospike
+      ignore_errors: yes
+
+    - name: Remove database files
+      command: rm -rf /opt/aerospike/data/parsr1.dat \
+                      /opt/aerospike/data/parsr2.dat \
+                      /opt/aerospike/data/parsr3.dat \
+                      /opt/aerospike/data/parsr4.dat
+      ignore_errors: yes

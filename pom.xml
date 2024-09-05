@@ -96,7 +96,7 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <version>2.6.4</version>
                 <configuration>
-                    <mainClass>allezon.SimpleClientApplication</mainClass>
+                    <mainClass>allezon.AllezonApp</mainClass>
                 </configuration>
                 <executions>
                     <execution>

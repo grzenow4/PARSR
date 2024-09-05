@@ -57,15 +57,12 @@ public class UserActionsService {
     private final Producer<String, UserTagEvent> kafkaProducer;
     private final ObjectMapper mapper;
     private final AerospikeClient client;
-    private final KafkaStreams streams;
 
     @Autowired
     public UserActionsService(AerospikeClient client,
-                                KafkaStreams streams,
                                 Producer<String, UserTagEvent> kafkaProducer,
                                 ObjectMapper mapper) {
         this.client = client;
-        this.streams = streams;
         this.kafkaProducer = kafkaProducer;
         this.mapper = mapper;
     }
@@ -106,12 +103,7 @@ public class UserActionsService {
                                                                String brandId,
                                                                String categoryId,
                                                                AggregatesQueryResult expectedResult) {
-        log.info("got request for aggregates!");
-        ReadOnlyKeyValueStore<String, AggregatedValue> store = streams.store(StoreQueryParameters.fromNameAndType(
-            KafkaStreamsConfig.STATE_STORE_NAME_KEY_VALUE_NAME, 
-            QueryableStoreTypes.keyValueStore()
-    )
-        );            
+        log.info("got request for aggregates!");       
         List<String> timeBuckets = getTimeBuckets(timeRangeStr);
         List<String> columns = createColumnNames(origin, brandId, categoryId, aggregates);
         List<List<String>> rows = new LinkedList<>();
@@ -120,7 +112,7 @@ public class UserActionsService {
             log.info("asking for value for key {}", key);
             Key aerospikeKey = new Key(NAMESPACE, SET_ANALYTICS, key);
             Record record = client.get(null, aerospikeKey);
-            AggregatedValue value = new AggregatedValue(record.getInt("count"), record.getInt("price"))
+            AggregatedValue value = new AggregatedValue(record.getInt("count"), record.getInt("price"));
             log.info("I actually got something! {}:{}", value.getCount(), value.getPrice());
             rows.add(createRow(bucket, timeRangeStr, aggregates, origin, brandId, categoryId, value));
         }          

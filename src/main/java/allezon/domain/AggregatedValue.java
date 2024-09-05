@@ -7,6 +7,10 @@ public class AggregatedValue {
     private int count;
     private int price;
 
+    public AggregatedValue() {
+        
+    }
+
     public AggregatedValue(int count, int price) {
         this.count = count;
         this.price = price;

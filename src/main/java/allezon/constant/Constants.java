@@ -12,6 +12,9 @@ public class Constants {
     public static final String COUNT_COLUMN_NAME = "count";
     public static final String SUM_PRICE_COLUMN_NAME = "sum_price";
 
+    public static final String COUNT_BIN = "count";
+    public static final String PRICE_BIN = "price";
+
     public static final String NAMESPACE = "parsr";
     public static final String SET_USER_TAGS = "user_tags";
     public static final String SET_ANALYTICS = "analytics";

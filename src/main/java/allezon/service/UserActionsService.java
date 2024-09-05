@@ -6,12 +6,8 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.time.temporal.ChronoUnit;
 
@@ -24,36 +20,21 @@ import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
 
 import com.aerospike.client.AerospikeClient;
 import com.aerospike.client.AerospikeException;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Host;
-import com.aerospike.client.Info;
 import com.aerospike.client.Key;
 import com.aerospike.client.Operation;
 import com.aerospike.client.Record;
 import com.aerospike.client.ResultCode;
 import com.aerospike.client.cdt.ListOperation;
-import com.aerospike.client.policy.ClientPolicy;
-import com.aerospike.client.policy.CommitLevel;
 import com.aerospike.client.policy.GenerationPolicy;
 import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.RecordExistsAction;
-import com.aerospike.client.policy.Replica;
 import com.aerospike.client.policy.WritePolicy;
-import com.aerospike.client.query.RecordSet;
-import com.aerospike.client.query.Statement;
-import com.aerospike.client.task.IndexTask;
-import com.aerospike.client.query.Filter;
-import com.aerospike.client.query.IndexType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -68,50 +49,25 @@ import allezon.domain.UserProfileResult;
 import allezon.domain.UserTagEvent;
 import allezon.config.KafkaStreamsConfig;
 
+import static allezon.constant.Constants.*;
+
 @Service
 public class UserActionsService {
-    public static final String BUCKET_COLUMN_NAME = "1m_bucket";
-    public static final String ACTION_COLUMN_NAME = "action";
-    public static final String ORIGIN_COLUMN_NAME = "origin";
-    public static final String BRAND_COLUMN_NAME = "brand_id";
-    public static final String CATEGORY_COLUMN_NAME = "category_id";
-    public static final String COUNT_COLUMN_NAME = "count";
-    public static final String SUM_PRICE_COLUMN_NAME = "sum_price";
-
-    private static final String NAMESPACE = "parsr";
-    private static final String SET_USER_TAGS = "user_tags";
-    private static final int MAX_LIST_SIZE = 200;
-    public static final DateTimeFormatter BUCKET_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss[.SSS]").withZone(ZoneOffset.UTC);
-
-    private static final Logger log = LoggerFactory.getLogger(UserActionsResource.class);
+    private static final Logger log = LoggerFactory.getLogger(UserActionsService.class);
     private final Producer<String, UserTagEvent> kafkaProducer;
-    private ObjectMapper mapper;
-    private AerospikeClient client;
+    private final ObjectMapper mapper;
+    private final AerospikeClient client;
     private final KafkaStreams streams;
 
     @Autowired
-    public UserActionsService(@Value("${aerospike.seeds}") String[] aerospikeSeeds, 
-                                @Value("${aerospike.port}") int port, 
+    public UserActionsService(AerospikeClient client,
                                 KafkaStreams streams,
-                                Producer<String, UserTagEvent> kafkaProducer) {
-        this.client = new AerospikeClient(defaultClientPolicy(), Arrays.stream(aerospikeSeeds).map(seed -> new Host(seed, port)).toArray(Host[]::new));
+                                Producer<String, UserTagEvent> kafkaProducer,
+                                ObjectMapper mapper) {
+        this.client = client;
         this.streams = streams;
         this.kafkaProducer = kafkaProducer;
-        mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-    }
-
-    private static ClientPolicy defaultClientPolicy() {
-        ClientPolicy defaultClientPolicy = new ClientPolicy();
-        defaultClientPolicy.readPolicyDefault.replica = Replica.MASTER_PROLES;
-        defaultClientPolicy.readPolicyDefault.socketTimeout = 1000;
-        defaultClientPolicy.readPolicyDefault.totalTimeout = 1000;
-        defaultClientPolicy.writePolicyDefault.socketTimeout = 15000;
-        defaultClientPolicy.writePolicyDefault.totalTimeout = 15000;
-        defaultClientPolicy.writePolicyDefault.maxRetries = 1;
-        defaultClientPolicy.writePolicyDefault.commitLevel = CommitLevel.COMMIT_MASTER;
-        defaultClientPolicy.writePolicyDefault.recordExistsAction = RecordExistsAction.REPLACE;
-        return defaultClientPolicy;
+        this.mapper = mapper;
     }
 
     public ResponseEntity<Void> addUserTag(UserTagEvent userTag) {
@@ -160,20 +116,28 @@ public class UserActionsService {
         List<String> columns = createColumnNames(origin, brandId, categoryId, aggregates);
         List<List<String>> rows = new LinkedList<>();
         for (String bucket : timeBuckets) {
-            log.info("asking for value for key {}", bucket + ":" + action.toString());
-            AggregatedValue value = store.get(bucket + ":" + action.toString());
+            String key = bucket + ":" + action.toString();
+            log.info("asking for value for key {}", key);
+            Key aerospikeKey = new Key(NAMESPACE, SET_ANALYTICS, key);
+            Record record = client.get(null, aerospikeKey);
+            AggregatedValue value = new AggregatedValue(record.getInt("count"), record.getInt("price"))
             log.info("I actually got something! {}:{}", value.getCount(), value.getPrice());
             rows.add(createRow(bucket, timeRangeStr, aggregates, origin, brandId, categoryId, value));
         }          
         AggregatesQueryResult result = new AggregatesQueryResult(columns, rows);       
         log.info("actually got some values....");
-        log.info("{}", result.toString());     
+        log.info("{}", result.toString());    
+        log.info("while expected was");
+        log.info("{}", expectedResult.toString());
+        log.info("_________________________________"); 
         return ResponseEntity.ok(result);                                                        
     }
 
 
     private List<String> createColumnNames(String origin, String brandId, String categoryId, List<Aggregate> aggregates) {
-        List<String> columns = Arrays.asList(BUCKET_COLUMN_NAME, ACTION_COLUMN_NAME);
+        List<String> columns = new LinkedList<>();
+        columns.add(BUCKET_COLUMN_NAME);
+        columns.add(ACTION_COLUMN_NAME);
         if (origin != null) {
             columns.add(ORIGIN_COLUMN_NAME);
         }
@@ -200,7 +164,9 @@ public class UserActionsService {
                             String brandId,
                             String categoryId,
                             AggregatedValue value) {
-        List<String> row = Arrays.asList(timeBucket, action);
+        List<String> row = new LinkedList<>();
+        row.add(timeBucket);
+        row.add(action);
         if (origin != null) {
             row.add(origin);
         }
@@ -273,7 +239,6 @@ public class UserActionsService {
         Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
         WritePolicy writePolicy = createWritePolicy(newRecord);
         client.operate(writePolicy, key, trimOperation);
-        log.info("just trimmed the list - it had {} records", currentSize);
     }
 
     private WritePolicy createWritePolicy(Record record) {

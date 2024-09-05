@@ -12,6 +12,8 @@ import org.apache.kafka.streams.state.QueryableStoreTypes;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.apache.kafka.streams.state.StoreBuilder;
 import org.apache.kafka.streams.state.Stores;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.kafka.streams.StoreQueryParameters;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -19,8 +21,19 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.support.serializer.JsonSerde;
 
+import com.aerospike.client.AerospikeClient;
+import com.aerospike.client.Bin;
+import com.aerospike.client.Key;
+import com.aerospike.client.Log;
+
 import allezon.domain.AggregatedValue;
 import allezon.domain.UserTagEvent;
+import allezon.service.UserActionsService;
+
+import static allezon.constant.Constants.COUNT_BIN;
+import static allezon.constant.Constants.NAMESPACE;
+import static allezon.constant.Constants.PRICE_BIN;
+import static allezon.constant.Constants.SET_ANALYTICS;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -34,6 +47,7 @@ import java.util.Random;
 
 @Configuration
 public class KafkaStreamsConfig {
+    private static final Logger log = LoggerFactory.getLogger(KafkaStreamsConfig.class);
     private final static String APP_ID = "allezon-analytics-app";
     public final static String STATE_STORE_NAME_KEY_VALUE_NAME = "allezon-s-s-1";
     private final static String STATE_STORE_OUTPUT_TOPIC = "allezon-aggregated-actions-input";
@@ -49,13 +63,18 @@ public class KafkaStreamsConfig {
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "st124vm101.rtb-lab.pl:9092");
         props.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
         props.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, JsonSerde.class.getName());
+        String stateDir = "/tmp/kafka-streams/" + System.getenv("HOSTNAME");
+        System.out.println("set state dir to: " + stateDir);
+        props.put(StreamsConfig.STATE_DIR_CONFIG, stateDir);
+        
         return props;
     }
 
     @Bean
     public KafkaStreams kafkaStreams(
             StreamsBuilder builder,
-            Properties kafkaStreamsProperties) {
+            Properties kafkaStreamsProperties,
+            AerospikeClient client) {
     
         JsonSerde<UserTagEvent> userTagEventSerde = new JsonSerde<>(UserTagEvent.class);
         JsonSerde<AggregatedValue> aggregatedValueSerde = new JsonSerde<>(AggregatedValue.class);
@@ -65,19 +84,25 @@ public class KafkaStreamsConfig {
                 Consumed.with(Serdes.String(), userTagEventSerde)
         );
     
-        KStream<String, AggregatedValue> aggregatedStream = userTagEventsStream
-                .flatMap((key, userTagEvent) -> reKeyInputStream(userTagEvent))
-                .groupByKey(
-                    Grouped.with(Serdes.String(), Serdes.Integer())
-                )
-                .aggregate(
-                        AggregatedValue::new,
-                        (key, value, aggregate) -> aggregate.aggregateProduct(value),
-                        Materialized.<String, AggregatedValue, KeyValueStore<Bytes, byte[]>>as(STATE_STORE_NAME_KEY_VALUE_NAME)
-                                .withKeySerde(Serdes.String())
-                                .withValueSerde(aggregatedValueSerde)
-                )
-                .toStream();
+        KTable<Windowed<String>, AggregatedValue> aggregatedTable = userTagEventsStream
+            .flatMap((key, userTagEvent) -> reKeyInputStream(userTagEvent))
+            .groupByKey(Grouped.with(Serdes.String(), Serdes.Integer()))
+            .windowedBy(TimeWindows.ofSizeAndGrace(Duration.ofSeconds(60), Duration.ofSeconds(10)))
+            .aggregate(
+                AggregatedValue::new, // Initializer
+                (key, event, aggregate) -> aggregate.aggregateProduct(event),
+                Materialized.with(Serdes.String(), aggregatedValueSerde) 
+        );
+
+        aggregatedTable.toStream().foreach((key, value) -> {
+            //write to aerospike
+            log.info("putting key {} to aerospike!", (String)key.key());
+            Key aerospikeKey = new Key(NAMESPACE, SET_ANALYTICS, key.key());
+            Bin countBin = new Bin(COUNT_BIN, value.getCount());
+            Bin priceBin = new Bin(PRICE_BIN, value.getPrice());
+            client.put(null, aerospikeKey, countBin, priceBin);
+            Log.info("sucesss__________________________________________");
+        });
     
         KafkaStreams streams = new KafkaStreams(builder.build(), kafkaStreamsProperties);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

@@ -31,9 +31,6 @@ import allezon.domain.UserTagEvent;
 
 @RestController
 public class UserActionsResource {
-
-    private static final Logger log = LoggerFactory.getLogger(UserActionsResource.class);
-
     @Autowired
     UserActionsService userActionsService;
 

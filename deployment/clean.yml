@@ -16,7 +16,7 @@
       ignore_errors: yes
 
 - name: Stop and remove load balancer container
-  hosts: load_balancer
+  hosts: master
   become: yes
 
   vars:

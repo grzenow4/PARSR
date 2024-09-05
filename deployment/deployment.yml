@@ -7,25 +7,15 @@
     app_image_name: allezon
     app_image_file: /tmp/allezon.tar
     balancer_image_name: my-proxy
-    balancer_image_file: /tmp/my-proxy.tar
+    balancer_container_name: my_proxy_container
 
   tasks:
     - name: Save app image to a tar file
       command: docker save -o {{ app_image_file }} {{ app_image_name }}
 
-    - name: Save load balancer image to a tar file
-      command: docker save -o {{ balancer_image_file }} {{ balancer_image_name }}
-
     - name: Ensure the app image tar file is readable by all users
       file:
         path: "{{ app_image_file }}"
-        owner: root
-        group: root
-        mode: '0644'
-
-    - name: Ensure the load balancer image tar file is readable by all users
-      file:
-        path: "{{ balancer_image_file }}"
         owner: root
         group: root
         mode: '0644'
@@ -37,11 +27,12 @@
       delegate_to: "{{ item }}"
       with_items: "{{ groups['nodes'] }}"
 
-    - name: Copy load balancer image to the load balancer node
-      copy:
-        src: "{{ balancer_image_file }}"
-        dest: "{{ balancer_image_file }}"
-      delegate_to: "{{ groups['load_balancer'][0] }}"
+    - name: Remove existing load balancer container if it exists
+      command: docker rm -f {{ balancer_container_name }}
+      ignore_errors: yes
+
+    - name: Run the load balancer container
+      command: docker run -d --network=host --privileged --name {{ balancer_container_name }} {{ balancer_image_name }}
 
 - name: Load Docker image and run app container on all nodes
   hosts: nodes
@@ -66,27 +57,3 @@
 
     - name: Run Docker container
       command: docker run -d --network=host --name {{ container_name }} {{ image_name }}
-
-- name: Load Docker image and run load balancer container
-  hosts: load_balancer
-  become: yes
-
-  vars:
-    image_name: my-proxy
-    image_file: /tmp/my-proxy.tar
-    container_name: my_proxy_container
-
-  tasks:
-    - name: Remove existing image if it exists
-      command: docker image rm -f {{ image_name }}
-      ignore_errors: yes
-
-    - name: Load Docker image from tar file
-      command: docker load -i {{ image_file }}
-
-    - name: Remove existing container if it exists
-      command: docker rm -f {{ container_name }}
-      ignore_errors: yes
-
-    - name: Run Docker container
-      command: docker run -d --network=host --privileged --name {{ container_name }} {{ image_name }}

@@ -48,7 +48,7 @@ mod-lua {
 
 namespace parsr {
 	replication-factor 2
-	memory-size 7G
+	memory-size 6G
   	nsup-period 15
 
 	stop-writes-pct 92
@@ -56,7 +56,7 @@ namespace parsr {
   	high-water-disk-pct 90
 
 	storage-engine device {
-    	filesize 6G
+    	filesize 4608M
 		file /opt/aerospike/data/parsr1.dat
 		file /opt/aerospike/data/parsr2.dat
 		file /opt/aerospike/data/parsr3.dat

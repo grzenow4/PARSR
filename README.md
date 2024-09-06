@@ -381,9 +381,7 @@ We decided not to put HTTP specs of the API in this document. If someone wants t
 
 
 # How to run the app
-Clone the repository on vm101.
-
-Everywhere, switch st124 to st<your number>, vm numbers can also be changed obviously.
+Clone the repository on vm101. Everywhere, switch st124 to st<your number>, vm numbers can also be changed obviously.
 
 Execute the following commands:
 ```
@@ -391,15 +389,7 @@ sudo apt -y install ansible sshpass maven
 ./deploy.sh <user> <password>
 ```
 
-Important: before each start of the testing platform, cleanup the database. (aerospike VMs)
+Important: before each start of the testing platform, cleanup the VMs.
 ```
-sudo bash clean.sh
+./clean.sh <user> <password>
 ```
-or (cloning not needed)
-```
-sudo systemctl stop aerospike
-sudo rm -rf /opt/aerospike/data/parsr*
-```
-
-# Todo:
-1. add use case 3 implementation

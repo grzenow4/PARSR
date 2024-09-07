@@ -32,7 +32,7 @@
       ignore_errors: yes
 
     - name: Run the load balancer container
-      command: docker run -d --network=host --privileged --name {{ balancer_container_name }} {{ balancer_image_name }}
+      command: docker run -d --network=host --privileged --log-driver=json-file --log-opt max-size=1g --name {{ balancer_container_name }} {{ balancer_image_name }}
 
 - name: Load Docker image and run app container on all nodes
   hosts: nodes
@@ -44,6 +44,9 @@
     container_name: allezon_container
 
   tasks:
+    - name: Install Docker
+      command: apt -y install docker docker-compose
+
     - name: Remove existing image if it exists
       command: docker image rm -f {{ image_name }}
       ignore_errors: yes

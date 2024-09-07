@@ -10,6 +10,9 @@ PASSWORD=$2
 
 EXTRA_VARS="ansible_user=$USER ansible_password=$PASSWORD ansible_ssh_extra_args='-o StrictHostKeyChecking=no'"
 
+# Install essential packages
+sudo apt -y install ansible sshpass maven docker docker-compose
+
 # Build docker images
 echo "Building load balancer Docker image..."
 (cd load_balancer && sudo docker build -t my-proxy .)

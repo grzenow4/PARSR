@@ -45,9 +45,9 @@ import java.util.Properties;
 @Configuration
 public class KafkaStreamsConfig {
     private static final Logger log = LoggerFactory.getLogger(KafkaStreamsConfig.class);
-    private final static String APP_ID = "allezonapp";
-    public final static String STATE_STORE_NAME_KEY_VALUE_NAME = "allezonson";
-    public final static String ANALYTICS_INPUT_TOPIC = "analytical";                     
+    private final static String APP_ID = "allezonappka";
+    public final static String STATE_STORE_NAME_KEY_VALUE_NAME = "allss";
+    public final static String ANALYTICS_INPUT_TOPIC = "analyti";                     
     public static final DateTimeFormatter BUCKET_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss").withZone(ZoneOffset.UTC);
 
 
@@ -62,6 +62,7 @@ public class KafkaStreamsConfig {
         System.out.println("set state dir to: " + stateDir);
         props.put(StreamsConfig.STATE_DIR_CONFIG, stateDir);
         props.put(StreamsConfig.NUM_STREAM_THREADS_CONFIG, 10);  // Ensures matching partitions
+        props.put(StreamsConfig.PROCESSING_GUARANTEE_CONFIG, StreamsConfig.EXACTLY_ONCE_V2);
         return props;
     }
 
@@ -80,12 +81,13 @@ public class KafkaStreamsConfig {
         KTable<Windowed<String>, AggregatedValue> aggregatedTable = userTagEventsStream
             .flatMap((key, userTagEvent) -> reKeyInputStream(userTagEvent))
             .groupByKey(Grouped.with(Serdes.String(), Serdes.Integer()))
-            .windowedBy(TimeWindows.ofSizeAndGrace(Duration.ofSeconds(60), Duration.ofSeconds(0)))
+            .windowedBy(TimeWindows.ofSizeAndGrace(Duration.ofSeconds(80), Duration.ofSeconds(10)))
             .aggregate(
                 AggregatedValue::new,
                 (key, event, aggregate) -> aggregate.aggregateProduct(event),
                 Materialized.with(Serdes.String(), aggregatedValueSerde) 
-        );
+        )
+        .suppress(Suppressed.untilWindowCloses(Suppressed.BufferConfig.unbounded())); // Suppress until the window closes
 
         aggregatedTable.toStream().foreach((key, value) -> {
             while (true) {
@@ -134,12 +136,6 @@ public class KafkaStreamsConfig {
                     throw e;
                 }
             }
-            // Key aerospikeKey = new Key(NAMESPACE, SET_ANALYTICS, key.key());
-            // Bin countBin = new Bin(COUNT_BIN, value.getCount());
-            // Bin priceBin = new Bin(PRICE_BIN, value.getPrice());
-            // WritePolicy writePolicy = new WritePolicy();
-            // // writePolicy.expiration = 24 * 60 * 60;
-            // client.put(writePolicy, aerospikeKey, countBin, priceBin);
         });
     
         KafkaStreams streams = new KafkaStreams(builder.build(), kafkaStreamsProperties);

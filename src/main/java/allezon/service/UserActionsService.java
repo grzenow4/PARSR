@@ -50,6 +50,7 @@ import allezon.domain.UserTagEvent;
 import allezon.config.KafkaStreamsConfig;
 
 import static allezon.constant.Constants.*;
+import static allezon.config.KafkaProducerConfig.*;
 
 @Service
 public class UserActionsService {
@@ -108,13 +109,13 @@ public class UserActionsService {
         List<String> columns = createColumnNames(origin, brandId, categoryId, aggregates);
         List<List<String>> rows = new LinkedList<>();
         for (String bucket : timeBuckets) {
-            String key = bucket + ":" + action.toString();
+            String key = makeKeyWithBlanks(bucket, action.toString(), origin, brandId, categoryId);
             log.info("asking for value for key {}", key);
             Key aerospikeKey = new Key(NAMESPACE, SET_ANALYTICS, key);
             Record record = client.get(null, aerospikeKey);
             AggregatedValue value = new AggregatedValue(record.getInt("count"), record.getInt("price"));
             log.info("I actually got something! {}:{}", value.getCount(), value.getPrice());
-            rows.add(createRow(bucket, timeRangeStr, aggregates, origin, brandId, categoryId, value));
+            rows.add(createRow(bucket, action.toString(), aggregates, origin, brandId, categoryId, value));
         }          
         AggregatesQueryResult result = new AggregatesQueryResult(columns, rows);       
         log.info("actually got some values....");
@@ -123,6 +124,30 @@ public class UserActionsService {
         log.info("{}", expectedResult.toString());
         log.info("_________________________________"); 
         return ResponseEntity.ok(result);                                                        
+    }
+
+    private String makeKeyWithBlanks(String bucket, String action, String origin, String brandId, String categoryId) {
+        StringBuilder sb = new StringBuilder();
+        
+        sb.append(bucket);
+        sb.append(DELIMITER);
+
+        sb.append(action);
+        sb.append(DELIMITER);
+
+        sb.append(fieldOrBlank(origin));
+        sb.append(DELIMITER);
+        
+        sb.append(fieldOrBlank(brandId));
+        sb.append(DELIMITER);
+
+        sb.append(fieldOrBlank(categoryId));
+        
+        return sb.toString();
+    }
+
+    private String fieldOrBlank(String field) {
+        return field != null ? field : BLANK;
     }
 
 
@@ -302,7 +327,21 @@ public class UserActionsService {
     }
 
     private List<String> getTimeBuckets(String timeRangeStr) {
-        return Arrays.asList(timeRangeStr.split("_"));       
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+        // Split the time_range string into time_from and time_to
+        String[] times = timeRangeStr.split("_");
+        LocalDateTime timeFrom = LocalDateTime.parse(times[0], formatter);
+        LocalDateTime timeTo = LocalDateTime.parse(times[1], formatter);
+
+        List<String> result = new ArrayList<>();
+
+        // Loop through each minute between timeFrom and timeTo (excluding timeTo)
+        while (timeFrom.isBefore(timeTo)) {
+            result.add(timeFrom.format(formatter));
+            timeFrom = timeFrom.plusMinutes(1);
+        }
+
+        return result;    
     }
 
 }

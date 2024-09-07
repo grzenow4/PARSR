@@ -2,6 +2,9 @@ package allezon.domain;
 
 import java.util.List;
 
+import lombok.ToString;
+
+@ToString
 public class AggregatesQueryResult {
 
     private List<String> columns;

@@ -20,4 +20,7 @@ public class Constants {
     public static final String SET_ANALYTICS = "analytics";
     public static final int MAX_LIST_SIZE = 200;
     public static final DateTimeFormatter BUCKET_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss[.SSS]").withZone(ZoneOffset.UTC);
+
+    public final static String BLANK = "*";
+    public final static String DELIMITER = ":";
 }

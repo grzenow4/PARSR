@@ -385,7 +385,7 @@ Clone the repository on vm101. Everywhere, switch st124 to st<your number>, vm n
 
 Execute the following commands:
 ```
-sudo apt -y install ansible sshpass maven
+sudo apt -y install ansible sshpass maven docker docker-compose
 ./deploy.sh <user> <password>
 ```
 

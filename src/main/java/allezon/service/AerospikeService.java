@@ -59,24 +59,13 @@ public class AerospikeService {
 
             // Fetch existing record if available
             Record existingRecord = client.get(null, aerospikeKey);
-        
-            long existingCount = 0L;
-            long existingPrice = 0L;
-        
-            if (existingRecord != null) {
-                existingCount = existingRecord.getLong(COUNT_BIN);
-                existingPrice = existingRecord.getLong(PRICE_BIN);
-            }
-        
-            long newCount = existingCount + value.getCount();
-            long newPrice = existingPrice + value.getPrice();
-        
-            Bin countBin = new Bin(COUNT_BIN, newCount);
-            Bin priceBin = new Bin(PRICE_BIN, newPrice);
+
+            Bin countBin = new Bin(COUNT_BIN, value.getCount());
+            Bin priceBin = new Bin(PRICE_BIN, value.getPrice());
         
             WritePolicy writePolicy = createWritePolicy(existingRecord);
         
-            client.put(writePolicy, aerospikeKey, countBin, priceBin);
+            client.add(writePolicy, aerospikeKey, countBin, priceBin);
             return true;
         } catch (AerospikeException ae) {
             if (ae.getResultCode() == ResultCode.GENERATION_ERROR) {

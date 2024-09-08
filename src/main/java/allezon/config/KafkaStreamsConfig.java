@@ -18,6 +18,7 @@ import allezon.domain.AggregatedValue;
 import allezon.domain.UserTagEvent;
 import allezon.service.AerospikeService;
 
+import static allezon.constant.Constants.AGGREGATION_WINDOW_SIZE;
 import static allezon.constant.Constants.ANALYTICS_INPUT_TOPIC;
 import static allezon.constant.Constants.APP_ID;
 import static allezon.constant.Constants.BLANK;
@@ -76,7 +77,7 @@ public class KafkaStreamsConfig {
         KTable<Windowed<String>, AggregatedValue> aggregatedTable = userTagEventsStream
             .flatMap((key, userTagEvent) -> reKeyInputStream(userTagEvent))
             .groupByKey(Grouped.with(Serdes.String(), Serdes.Integer()))
-            .windowedBy(TimeWindows.ofSizeAndGrace(Duration.ofSeconds(20), Duration.ofSeconds(5)))
+            .windowedBy(TimeWindows.ofSizeAndGrace(Duration.ofSeconds(AGGREGATION_WINDOW_SIZE), Duration.ZERO))
             .aggregate(
                 AggregatedValue::new,
                 (key, event, aggregate) -> aggregate.aggregateProduct(event),

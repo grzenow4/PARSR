@@ -7,12 +7,12 @@
     container_name: allezon_container
 
   tasks:
-    - name: Remove Docker image
-      command: docker image rm -f {{ image_name }}
-      ignore_errors: yes
-
     - name: Stop and remove Docker container
       command: docker rm -f {{ container_name }}
+      ignore_errors: yes
+
+    - name: Remove Docker image
+      command: docker image rm -f {{ image_name }}
       ignore_errors: yes
 
 - name: Stop and remove load balancer container
@@ -24,12 +24,12 @@
     container_name: my_proxy_container
 
   tasks:
-    - name: Remove Docker image
-      command: docker image rm -f {{ image_name }}
-      ignore_errors: yes
-
     - name: Stop and remove Docker container
       command: docker rm -f {{ container_name }}
+      ignore_errors: yes
+
+    - name: Remove Docker image
+      command: docker image rm -f {{ image_name }}
       ignore_errors: yes
 
 - name: Clean aerospike database

@@ -4,8 +4,8 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
 public class Constants {
-    public final static String APP_ID = "app-allezon3";
-    public final static String STATE_STORE_NAME_KEY_VALUE_NAME = "statestore-allezon3";
+    public final static String APP_ID = "app-allezon";
+    public final static String STATE_STORE_NAME_KEY_VALUE_NAME = "statestore-allezon";
     public final static String ANALYTICS_INPUT_TOPIC = "all.in";  
 
     public static final String BUCKET_COLUMN_NAME = "1m_bucket";

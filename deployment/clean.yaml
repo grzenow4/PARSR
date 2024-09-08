@@ -7,12 +7,12 @@
     container_name: allezon_container
 
   tasks:
-    - name: Remove Docker image
-      command: docker image rm -f {{ image_name }}
-      ignore_errors: yes
-
     - name: Stop and remove Docker container
       command: docker rm -f {{ container_name }}
+      ignore_errors: yes
+
+    - name: Remove Docker image
+      command: docker image rm -f {{ image_name }}
       ignore_errors: yes
 
 - name: Stop and remove load balancer container
@@ -24,12 +24,12 @@
     container_name: my_proxy_container
 
   tasks:
-    - name: Remove Docker image
-      command: docker image rm -f {{ image_name }}
-      ignore_errors: yes
-
     - name: Stop and remove Docker container
       command: docker rm -f {{ container_name }}
+      ignore_errors: yes
+
+    - name: Remove Docker image
+      command: docker image rm -f {{ image_name }}
       ignore_errors: yes
 
 - name: Clean aerospike database
@@ -46,4 +46,21 @@
                       /opt/aerospike/data/parsr2.dat \
                       /opt/aerospike/data/parsr3.dat \
                       /opt/aerospike/data/parsr4.dat
+      ignore_errors: yes
+
+- name: Stop kafka and remove topics
+  hosts: kafka
+  become: yes
+
+  vars:
+    topic_name: all.in
+
+  tasks:
+    - name: Delete kafka topic on the first Kafka node
+      command: /opt/kafka/bin/kafka-topics.sh --delete --topic {{ topic_name }} --bootstrap-server localhost:9092
+      when: inventory_hostname == groups['kafka'][0]
+      ignore_errors: yes
+
+    - name: Stop kafka
+      command: systemctl stop kafka
       ignore_errors: yes

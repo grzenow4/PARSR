@@ -6,3 +6,6 @@ st124vm1[07:10].rtb-lab.pl
 
 [aerospike]
 st124vm1[02:06].rtb-lab.pl
+
+[kafka]
+st124vm1[02:04].rtb-lab.pl

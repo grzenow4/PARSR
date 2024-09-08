@@ -2,9 +2,11 @@ package allezon.domain;
 
 import java.util.List;
 
+import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 @ToString
+@EqualsAndHashCode
 public class AggregatesQueryResult {
 
     private List<String> columns;

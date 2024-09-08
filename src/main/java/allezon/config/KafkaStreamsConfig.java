@@ -76,7 +76,7 @@ public class KafkaStreamsConfig {
         KTable<Windowed<String>, AggregatedValue> aggregatedTable = userTagEventsStream
             .flatMap((key, userTagEvent) -> reKeyInputStream(userTagEvent))
             .groupByKey(Grouped.with(Serdes.String(), Serdes.Integer()))
-            .windowedBy(TimeWindows.ofSizeAndGrace(Duration.ofSeconds(30), Duration.ofSeconds(5)))
+            .windowedBy(TimeWindows.ofSizeAndGrace(Duration.ofSeconds(20), Duration.ofSeconds(5)))
             .aggregate(
                 AggregatedValue::new,
                 (key, event, aggregate) -> aggregate.aggregateProduct(event),

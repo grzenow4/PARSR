@@ -2,7 +2,6 @@ package allezon.service;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -29,7 +28,6 @@ import allezon.domain.AggregatesQueryResult;
 import allezon.domain.TimeBound;
 import allezon.domain.UserProfileResult;
 import allezon.domain.UserTagEvent;
-import allezon.config.KafkaStreamsConfig;
 
 import static allezon.constant.Constants.*;
 
@@ -92,7 +90,14 @@ public class UserActionsService {
         List<String> timeBuckets = getTimeBuckets(timeRangeStr);
         List<String> columns = createColumnNames(origin, brandId, categoryId, aggregates);
         List<List<String>> rows = createAllRows(timeBuckets, action, aggregates, origin, brandId, categoryId);
-        AggregatesQueryResult result = new AggregatesQueryResult(columns, rows);       
+        AggregatesQueryResult result = new AggregatesQueryResult(columns, rows);      
+        if (!result.equals(expectedResult)) {
+            log.info("produced:");
+            log.info(result.toString());
+            log.info("expected:");
+            log.info(expectedResult.toString());
+            log.info("_______________");
+        } 
         return ResponseEntity.ok(result);                                                        
     }
 
@@ -107,22 +112,14 @@ public class UserActionsService {
     }
 
     private List<String> createRow(String bucket, Action action, List<Aggregate> aggregates, String origin, String brandId, String categoryId) {
-        int retryCount = 5;
-        while (retryCount > 0) {
-            try {
-                String key = makeKeyWithBlanks(bucket, action.toString(), origin, brandId, categoryId);
-                Key aerospikeKey = new Key(NAMESPACE, SET_ANALYTICS, key);
-                Record record = aerospikeService.get(null, aerospikeKey);
-                if (record == null) {
-                    log.info("record is null, key: ", key);
-                }
-                AggregatedValue value = new AggregatedValue(record.getInt("count"), record.getInt("price"));
-                return formatRow(bucket, action.toString(), aggregates, origin, brandId, categoryId, value);
-            } catch (NullPointerException e) {
-                retryCount--;
-            }
+        String key = makeKeyWithBlanks(bucket, action.toString(), origin, brandId, categoryId);
+        Key aerospikeKey = new Key(NAMESPACE, SET_ANALYTICS, key);
+        Record record = aerospikeService.get(null, aerospikeKey);
+        if (record == null) {
+            log.info("record is null, key: {}", key);
         }
-        return List.of(); // failed to read the Record
+        AggregatedValue value = new AggregatedValue(record.getLong("count"), record.getLong("price"));
+        return formatRow(bucket, action.toString(), aggregates, origin, brandId, categoryId, value);
     }
 
     private String makeKeyWithBlanks(String bucket, String action, String origin, String brandId, String categoryId) {
@@ -208,21 +205,18 @@ public class UserActionsService {
     }
 
     private String generate1MinuteBucket(Instant timestamp) {
-        // Truncate to the nearest minute and format it
         Instant truncatedTime = timestamp.truncatedTo(ChronoUnit.MINUTES);
         return BUCKET_FORMATTER.format(truncatedTime);
     }
 
     private List<String> getTimeBuckets(String timeRangeStr) {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-        // Split the time_range string into time_from and time_to
         String[] times = timeRangeStr.split("_");
         LocalDateTime timeFrom = LocalDateTime.parse(times[0], formatter);
         LocalDateTime timeTo = LocalDateTime.parse(times[1], formatter);
 
         List<String> result = new ArrayList<>();
 
-        // Loop through each minute between timeFrom and timeTo (excluding timeTo)
         while (timeFrom.isBefore(timeTo)) {
             result.add(timeFrom.format(formatter));
             timeFrom = timeFrom.plusMinutes(1);

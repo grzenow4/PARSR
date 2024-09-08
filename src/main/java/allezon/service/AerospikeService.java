@@ -60,16 +60,16 @@ public class AerospikeService {
             // Fetch existing record if available
             Record existingRecord = client.get(null, aerospikeKey);
         
-            int existingCount = 0;
-            int existingPrice = 0;
+            long existingCount = 0L;
+            long existingPrice = 0L;
         
             if (existingRecord != null) {
-                existingCount = existingRecord.getInt(COUNT_BIN);
-                existingPrice = existingRecord.getInt(PRICE_BIN);
+                existingCount = existingRecord.getLong(COUNT_BIN);
+                existingPrice = existingRecord.getLong(PRICE_BIN);
             }
         
-            int newCount = existingCount + value.getCount();
-            int newPrice = existingPrice + value.getPrice();
+            long newCount = existingCount + value.getCount();
+            long newPrice = existingPrice + value.getPrice();
         
             Bin countBin = new Bin(COUNT_BIN, newCount);
             Bin priceBin = new Bin(PRICE_BIN, newPrice);
@@ -166,7 +166,7 @@ public class AerospikeService {
     }
 
     private boolean isListTooLarge(int currentSize) {
-        return currentSize > 2 * MAX_LIST_SIZE;
+        return currentSize > 1.3 * MAX_LIST_SIZE; 
     }
 
     private WritePolicy createWritePolicy(Record record) {

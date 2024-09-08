@@ -7,11 +7,16 @@ fi
 
 USER=$1
 PASSWORD=$2
-
 EXTRA_VARS="ansible_user=$USER ansible_password=$PASSWORD ansible_ssh_extra_args='-o StrictHostKeyChecking=no'"
 
+# Add other VMs to the known_hosts
+for i in $(seq -w 01 10); do
+    sshpass -p $PASSWORD ssh "$USER"@"$USER"vm1"$i".rtb-lab.pl \
+    -o StrictHostKeyChecking=no -C "/bin/true"
+done
+
 # Install essential packages
-sudo apt -y install ansible sshpass maven docker docker-compose
+sudo apt -y install ansible sshpass maven docker docker-compose openjdk-17-jdk
 
 # Build docker images
 echo "Building load balancer Docker image..."

@@ -28,6 +28,7 @@ import allezon.domain.AggregatesQueryResult;
 import allezon.domain.TimeBound;
 import allezon.domain.UserProfileResult;
 import allezon.domain.UserTagEvent;
+import lombok.val;
 
 import static allezon.constant.Constants.*;
 
@@ -115,10 +116,13 @@ public class UserActionsService {
         String key = makeKeyWithBlanks(bucket, action.toString(), origin, brandId, categoryId);
         Key aerospikeKey = new Key(NAMESPACE, SET_ANALYTICS, key);
         Record record = aerospikeService.get(null, aerospikeKey);
+        AggregatedValue value;
         if (record == null) {
-            log.info("record is null, key: {}", key);
+            // there was no such action in this time bucket
+            value = new AggregatedValue(0L, 0L);
+        } else {
+            value = new AggregatedValue(record.getLong("count"), record.getLong("price"));
         }
-        AggregatedValue value = new AggregatedValue(record.getLong("count"), record.getLong("price"));
         return formatRow(bucket, action.toString(), aggregates, origin, brandId, categoryId, value);
     }
 

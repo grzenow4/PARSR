@@ -27,7 +27,7 @@ echo "Building load balancer Docker image..."
 (cd load_balancer && sudo docker build -t my-proxy .)
 
 echo "Building app Docker image..."
-mvn -Pdocker package
+sudo mvn -Pdocker package
 
 # Start aerospike
 ansible-playbook --extra-vars "$EXTRA_VARS" -i hosts aerospike/aerospike.yaml

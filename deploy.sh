@@ -13,7 +13,7 @@ EXTRA_VARS="ansible_user=$USER ansible_password=$PASSWORD ansible_ssh_extra_args
 sudo apt -y install ansible sshpass maven docker docker-compose openjdk-17-jdk
 
 # Upgrade ansible package
-sudo add-apt-repository ppa:ansible/ansible
+sudo add-apt-repository -y ppa:ansible/ansible
 sudo apt update && sudo apt upgrade ansible
 
 # Add other VMs to the known_hosts

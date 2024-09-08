@@ -167,9 +167,12 @@
   hosts: kafka
   become: yes
 
+  vars:
+    topic_name: all.in
+
   tasks:
     - name: Create Kafka topic only on the first Kafka node
-      command: /opt/kafka/bin/kafka-topics.sh --create --topic app.in --partitions 10 --bootstrap-server localhost:9092 --config retention.ms=300000
+      command: /opt/kafka/bin/kafka-topics.sh --create --topic {{ topic_name }} --partitions 10 --bootstrap-server localhost:9092 --config retention.ms=300000
       when: inventory_hostname == groups['kafka'][0]
 
     - name: Verify that the Kafka topic exists
@@ -177,9 +180,9 @@
       register: kafka_topics
       when: inventory_hostname == groups['kafka'][0]
 
-    - name: Ensure the Kafka topic 'app.in' exists
+    - name: Ensure the Kafka topic '{{ topic_name }}' exists
       assert:
-        that: "'app.in' in kafka_topics.stdout"
-        fail_msg: "The Kafka topic 'app.in' was not created successfully."
-        success_msg: "The Kafka topic 'app.in' exists."
+        that: "'{{ topic_name }}' in kafka_topics.stdout"
+        fail_msg: "The Kafka topic '{{ topic_name }}' was not created successfully."
+        success_msg: "The Kafka topic '{{ topic_name }}' exists."
       when: inventory_hostname == groups['kafka'][0]

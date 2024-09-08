@@ -52,9 +52,12 @@
   hosts: kafka
   become: yes
 
+  vars:
+    topic_name: all.in
+
   tasks:
     - name: Delete kafka topic on the first Kafka node
-      command: /opt/kafka/bin/kafka-topics.sh --delete --topic app.in --bootstrap-server localhost:9092
+      command: /opt/kafka/bin/kafka-topics.sh --delete --topic {{ topic_name }} --bootstrap-server localhost:9092
       when: inventory_hostname == groups['kafka'][0]
       ignore_errors: yes
 

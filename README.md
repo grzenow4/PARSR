@@ -31,3 +31,9 @@ This script stops all docker containers, stops aerospike databases and kafka bro
 1. Haproxy load balancer uses /health endpoint for frequent healthcheck of java nodes, allowing it for quick updates in case of a node outage.
 1. UC3 is implemented using KafkaStreams, allowing it to naturally scale horizontally. During testing, we noticed that only around 80% of /aggregate requests succeed, suspecting that it is a result of imperfect configuration of aggregation strategy of the KTable. After aggregation, results are written to Aerospike with retention time = 24h.
 1. UC1 and UC2 work close to 100% success rate, with some rare drops occuring only on some runs, mostly in the earliest time when starting the application.
+
+# Testing platfomr snapshot
+After just 2 hours, a snapshot of longer run to be added soon.
+![](Testing_Platform_View.png)
+Database state:
+![](Asadm_view.png)

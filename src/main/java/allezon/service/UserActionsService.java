@@ -92,13 +92,6 @@ public class UserActionsService {
         List<String> columns = createColumnNames(origin, brandId, categoryId, aggregates);
         List<List<String>> rows = createAllRows(timeBuckets, action, aggregates, origin, brandId, categoryId);
         AggregatesQueryResult result = new AggregatesQueryResult(columns, rows);      
-        if (!result.equals(expectedResult)) {
-            log.info("produced:");
-            log.info(result.toString());
-            log.info("expected:");
-            log.info(expectedResult.toString());
-            log.info("_______________");
-        } 
         return ResponseEntity.ok(result);                                                        
     }
 

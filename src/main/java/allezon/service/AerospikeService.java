@@ -155,7 +155,7 @@ public class AerospikeService {
     }
 
     private boolean isListTooLarge(int currentSize) {
-        return currentSize > 1.3 * MAX_LIST_SIZE; 
+        return currentSize > 2 * MAX_LIST_SIZE; 
     }
 
     private WritePolicy createWritePolicy(Record record) {
@@ -175,7 +175,7 @@ public class AerospikeService {
     }
 
     private void removeOutdatedRecords(Record newRecord, int currentSize, Key key) {
-        Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 1);
+        Operation trimOperation = ListOperation.removeRange("tags", 0, currentSize - MAX_LIST_SIZE - 20);
         WritePolicy writePolicy = createWritePolicy(newRecord);
         client.operate(writePolicy, key, trimOperation);
     }

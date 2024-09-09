@@ -25,7 +25,7 @@ public class Constants {
     public static final int MAX_LIST_SIZE = 200;
     public static final DateTimeFormatter BUCKET_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss[.SSS]").withZone(ZoneOffset.UTC);
 
-    public static final int AGGREGATION_WINDOW_SIZE = 30;
+    public static final int AGGREGATION_WINDOW_SIZE = 20;
 
     public final static String BLANK = "*";
     public final static String DELIMITER = ":";

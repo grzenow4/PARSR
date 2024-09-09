@@ -378,17 +378,3 @@ We decided not to put HTTP specs of the API in this document. If someone wants t
 * Use Load Balancer to distribute HTTP traffic on several independent machines.
 * Try to implement Use Case 3 in an event streaming fashion.
 * Automated and managed deployment is preferred. Shell scripts, Ansible, Docker Swarm + Docker Stack, Kubernetes - there is a plethora of available options.
-
-
-# How to run the app
-Clone the repository on vm101. Everywhere, switch st124 to st<your number>, vm numbers can also be changed obviously.
-
-Execute the following commands:
-```
-./deploy.sh <user> <password>
-```
-
-Important: before each start of the testing platform, cleanup the VMs.
-```
-./clean.sh <user> <password>
-```
